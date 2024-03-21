@@ -1,0 +1,19 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>dataproc</name>
+  <version>0.0.1</version>
+  <description>Bag file data processing package</description>
+
+  <!-- One maintainer tag required, multiple allowed, one person per tag -->
+  <maintainer email="agishrus@fel.cvut.cz">Ruslan Agishev</maintainer>
+  
+  <license>BSD</license>
+  <url type="website">https://github.com/RuslanAgishev/dataproc</url>
+  
+  <buildtool_depend>catkin</buildtool_depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+
+</package>
