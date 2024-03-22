@@ -1,4 +1,5 @@
 #!/usr/bin/env python
+from tqdm import tqdm
 
 import rosbag
 import argparse
@@ -6,9 +7,7 @@ import os
 
 
 def parse_args():
-    parser = argparse.ArgumentParser(
-        prog='bagmerge',
-        description='Merges two bagfiles.')
+    parser = argparse.ArgumentParser(prog='bagmerge', description='Merges two bagfiles.')
     parser.add_argument('-o', type=str, help='name of the output file',
                         default=None, metavar="output_file")
     parser.add_argument('-t', type=str, help='topics which should be merged to the main bag',
@@ -37,8 +36,7 @@ def get_next(bag_iter, reindex=False,
         return None
 
 
-def merge_bag(main_bagfile, bagfile, outfile=None, topics=None,
-              reindex=True):
+def merge_bag(main_bagfile, bagfile, outfile=None, topics=None, reindex=True):
     # get min and max time in bagfile
     main_limits = get_limits(main_bagfile)
     limits = get_limits(bagfile)
@@ -83,21 +81,25 @@ def get_limits(bagfile):
     end_time = None
     start_time = None
 
-    for topic, msg, t in rosbag.Bag(bagfile).read_messages():
-        if start_time == None or t < start_time:
+    for topic, msg, t in tqdm(rosbag.Bag(bagfile).read_messages(), total=rosbag.Bag(bagfile).get_message_count()):
+        if start_time is None or t < start_time:
             start_time = t
-        if end_time == None or t > end_time:
+        if end_time is None or t > end_time:
             end_time = t
-    return (start_time, end_time)
+    return start_time, end_time
 
 
-if __name__ == "__main__":
+def main():
     args = parse_args()
     print(args)
-    if args.t != None:
+    if args.t is not None:
         args.t = args.t.split(',')
     merge_bag(args.main_bagfile,
               args.bagfile,
               outfile=args.o,
               topics=args.t,
               reindex=args.i)
+
+
+if __name__ == "__main__":
+    main()

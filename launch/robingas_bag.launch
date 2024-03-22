@@ -5,23 +5,21 @@
     <arg name="rate" default="1." doc="Playback rate"/>
     <arg name="delay" default="3.0" doc="Delay in the bag file [sec]"/>
     <arg name="start" default="0." doc="Start moment in a bag file [sec]"/>
-    <arg name="debayer" default="true" doc="Debayer images or not"/>
-    <arg name="rectify" default="true" doc="Rectify images or not"/>
+    <arg name="debayer" default="false" doc="Debayer images or not"/>
     <arg name="split_omni" default="true" doc="Split omni camera topic to separate images or not"/>
+    <arg name="record" default="false" doc="Record new bag file with image and deskewed point cloud topics or not"/>
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag"/> -->
 <!--    <arg name="bag" default="$(dirname)/../data/robingas/data/22-09-27-unhost/husky/husky_2022-09-27-15-01-44.bag"/> -->
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-06-30-cimicky_haj/husky_2022-06-30-15-58-37.bag"/> -->
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag"/> -->
-    <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag"/>
+    <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag"/>
+<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag"/> -->
+<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag"/> -->
 
     <arg name="params" default="$(eval bag.split()[0] + '.params')"/>
     <rosparam command="load" file="$(arg params)"/>
     <param name="use_sim_time" value="true"/>
 
-    <!--
-        Workaround for /tf_static problems with rosbag.
-        TODO Watch https://github.com/ros/geometry2/issues/181
-    -->
+    <!-- Workaround for /tf_static problems with rosbag: https://github.com/ros/geometry2/issues/181 -->
     <node name="play_tf_static" pkg="dataproc" type="play_tf_static"
          args="$(arg bag)" output="log">
         <remap from="~tf_static" to="/tf_static"/>
@@ -87,7 +85,7 @@
     </group>
 
     <!-- Rectifying images with image_proc -->
-    <group if="$(arg rectify)">
+    <group>
         <group ns="camera_front">
             <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
                  <param name="image_transport" value="compressed"/>
@@ -140,5 +138,32 @@
 
     <!-- Visualization -->
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
-          args="-d $(dirname)/../config/rviz/robingas.rviz"/>
+               args="-d $(dirname)/../config/rviz/robingas_tradr.rviz"/>
+<!--           args="-d $(dirname)/../config/rviz/robingas.rviz"/> -->
+
+    <!-- Record new bag file with image topic -->
+    <node if="$(arg record)" pkg="rosbag" type="record" name="rosbag_record_images"
+          args="/camera_front/image_rect/compressed
+                /camera_left/image_rect/compressed
+                /camera_rear/image_rect/compressed
+                /camera_right/image_rect/compressed
+                /camera_rear_right/image_rect/compressed
+                /camera_rear_left/image_rect/compressed
+                /camera_right/image_rect/compressed
+                /camera_up/image_rect/compressed
+
+                /camera_front/camera_info
+                /camera_left/camera_info
+                /camera_rear/camera_info
+                /camera_right/camera_info
+                /camera_rear_right/camera_info
+                /camera_rear_left/camera_info
+                /camera_right/camera_info
+                /camera_up/camera_info
+
+                -O $(arg bag)_images.bag"/>
+    <!-- Record new bag file with deskewed points topic -->
+    <node if="$(arg record)" pkg="rosbag" type="record" name="rosbag_record_points"
+          args="/points_deskewed
+                -O $(arg bag)_points.bag"/>
 </launch>
