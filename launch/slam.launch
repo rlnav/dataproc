@@ -7,7 +7,7 @@
     <arg name="params" default="$(dirname)/../config/slam/mapper_node_$(arg lidar_beams).params"/>
 
     <!-- ICP mapper node -->
-    <node pkg="norlab_icp_mapper_ros" type="mapper_node" name="mapper_node" output="screen">
+    <node pkg="norlab_icp_mapper_ros" type="mapper_node" name="mapper_node">
         <rosparam command="load" file="$(arg params)"/>
         <rosparam subst_value="true">
             robot_frame: $(arg robot_frame)
@@ -16,8 +16,6 @@
             input_filters_config: $(dirname)/../config/slam/input_filters_$(arg lidar_beams).yaml
             map_post_filters_config: $(dirname)/../config/slam/map_post_filters_$(arg lidar_beams).yaml
         </rosparam>
-
         <remap from="points_in" to="$(arg cloud)"/>
     </node>
-
 </launch>

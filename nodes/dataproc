@@ -23,8 +23,10 @@ class DataProc:
                  camera_info_topics=[],
                  points_topic='/points',
                  robot_frame='base_link',
+                 map_frame='map',
                  max_msgs_delay=0.5,
                  ):
+        self.map_frame = map_frame
         self.robot_frame = robot_frame
         self.img_topics = np.sort(img_topics).tolist()
         self.camera_info_topics = np.sort(camera_info_topics).tolist()
@@ -76,7 +78,7 @@ class DataProc:
 
         return E, K, D
 
-    def get_data(self, img_msgs, info_msgs, points_msg):
+    def get_sensor_data(self, img_msgs, info_msgs, points_msg):
         """
         Get inputs for LSS model from image and camera info messages.
         """
@@ -112,12 +114,48 @@ class DataProc:
 
         return imgs, Ks, Es, points
 
+    def get_map_pose(self):
+        try:
+            tf = self.tf_buffer.lookup_transform(self.map_frame, self.robot_frame, rospy.Time(0))
+        except Exception as ex:
+            rospy.logerr('Could not transform from camera %s to robot %s: %s.',
+                         self.robot_frame, self.map_frame, ex)
+            raise ex
+        pose = np.array(numpify(tf.transform), dtype=np.float32).reshape((4, 4))
+        return pose
+
     def callback(self, *msgs):
         rospy.logdebug('Received %d messages' % len(msgs))
         t0 = time()
         with self.proc_lock:
             self.proc(*msgs)
         rospy.logdebug('Processing time: %.3f [sec]' % (time() - t0))
+
+    def draw_points_in_images(self, imgs, Ks, Es, points, output_file='points.png'):
+        imgs = torch.from_numpy(imgs)
+        Ks = torch.from_numpy(Ks)
+        Es = torch.from_numpy(Es)
+        points = torch.from_numpy(points).T
+
+        Rs = Es[:, :3, :3]
+        ts = Es[:, :3, 3]
+
+        assert len(imgs) % 2 == 0, 'Number of images must be even'
+        n_rows, n_cols = 2, len(imgs) // 2
+        fig = plt.figure(figsize=(n_cols * 5, n_rows * 5))
+        gs = mpl.gridspec.GridSpec(n_rows, n_cols)
+        gs.update(wspace=0.0, hspace=0.0, left=0.0, right=1.0, top=1.0, bottom=0.0)
+        H, W = imgs.shape[1], imgs.shape[2]
+        for imgi in range(len(imgs)):
+            ego_pts = ego_to_cam(points, Rs[imgi], ts[imgi], Ks[imgi])
+            mask = get_only_in_img_mask(ego_pts, H, W)
+            ax = plt.subplot(gs[imgi // n_cols, imgi % n_cols])
+            ax.imshow(imgs[imgi].numpy()[..., ::-1])
+            plt.scatter(ego_pts[0, mask], ego_pts[1, mask], c=points[2, mask],
+                        s=1, alpha=0.2, cmap='jet', vmin=-1, vmax=1)
+            plt.axis('off')
+        plt.savefig(output_file)
+        plt.close(fig)
 
     def proc(self, *msgs):
         n = len(msgs)
@@ -132,36 +170,15 @@ class DataProc:
         points_msg = msgs[-1]
         assert isinstance(points_msg, PointCloud2)
 
-        imgs, Ks, Es, points = self.get_data(img_msgs, info_msgs, points_msg)
+        imgs, Ks, Es, points = self.get_sensor_data(img_msgs, info_msgs, points_msg)
         rospy.logdebug('imgs shape: %s' % str(imgs.shape))
         rospy.logdebug('Ks shape: %s' % str(Ks.shape))
         rospy.logdebug('Es shape: %s' % str(Es.shape))
         rospy.logdebug('points shape: %s' % str(points.shape))
 
-        imgs = torch.from_numpy(imgs)
-        Ks = torch.from_numpy(Ks)
-        Es = torch.from_numpy(Es)
-        points = torch.from_numpy(points).T
-
-        Rs = Es[:, :3, :3]
-        ts = Es[:, :3, 3]
-
-        fig = plt.figure(figsize=(12, 8))
-        assert len(imgs) % 2 == 0, 'Number of images must be even'
-        n_rows, n_cols = 2, len(imgs) // 2
-        gs = mpl.gridspec.GridSpec(n_rows, n_cols)
-        gs.update(wspace=0.0, hspace=0.0, left=0.0, right=1.0, top=1.0, bottom=0.0)
-        H, W = imgs.shape[1], imgs.shape[2]
-        for imgi in range(len(imgs)):
-            ego_pts = ego_to_cam(points, Rs[imgi], ts[imgi], Ks[imgi])
-            mask = get_only_in_img_mask(ego_pts, H, W)
-            ax = plt.subplot(gs[imgi // n_cols, imgi % n_cols])
-            ax.imshow(imgs[imgi].numpy()[..., ::-1])
-            plt.scatter(ego_pts[0, mask], ego_pts[1, mask], c=points[2, mask],
-                        s=1, alpha=0.2, cmap='jet', vmin=-1, vmax=1)
-            plt.axis('off')
-        plt.savefig('points.png')
-        plt.close(fig)
+        # self.draw_points_in_images(imgs, Ks, Es, points)
+        map_pose = self.get_map_pose()
+        rospy.logdebug('map_pose shape: %s' % str(map_pose.shape))
 
     def spin(self):
         try:
