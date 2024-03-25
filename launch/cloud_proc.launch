@@ -29,6 +29,6 @@
             zero_valid: false
         </rosparam>
         <remap from="input" to="$(arg input)_in_range"/>
-        <remap from="output" to="$(arg input)_voxel"/>
+        <remap from="output" to="$(arg output)"/>
     </node>
 </launch>

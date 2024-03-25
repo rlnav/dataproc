@@ -1,0 +1,189 @@
+#!/usr/bin/env python
+
+from threading import RLock
+import numpy as np
+import torch
+import rospy
+from cv_bridge import CvBridge
+from dataproc.utils import position
+from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
+from dataproc.transformations import transform_cloud
+from sensor_msgs.msg import CompressedImage, PointCloud2, CameraInfo
+from time import time
+from message_filters import ApproximateTimeSynchronizer, Subscriber
+import tf2_ros
+from ros_numpy import numpify
+import matplotlib.pyplot as plt
+import matplotlib as mpl
+
+
+class DataProc:
+    def __init__(self,
+                 img_topics=[],
+                 camera_info_topics=[],
+                 points_topic='/points',
+                 robot_frame='base_link',
+                 max_msgs_delay=0.5,
+                 ):
+        self.robot_frame = robot_frame
+        self.img_topics = np.sort(img_topics).tolist()
+        self.camera_info_topics = np.sort(camera_info_topics).tolist()
+        self.points_topic = points_topic
+        self.cv_bridge = CvBridge()
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
+        self.proc_lock = RLock()
+        self.max_msgs_delay = max_msgs_delay
+
+    def start(self):
+        """
+        Subscribing to images, camera info and points with approximate time synchronization
+        """
+        self.subs = []
+        for topic in self.img_topics:
+            rospy.loginfo('Subscribing to %s' % topic)
+            self.subs.append(Subscriber(topic, CompressedImage))
+        for topic in self.camera_info_topics:
+            rospy.loginfo('Subscribing to %s' % topic)
+            self.subs.append(Subscriber(topic, CameraInfo))
+        rospy.loginfo('Subscribing to %s' % self.points_topic)
+        self.subs.append(Subscriber(self.points_topic, PointCloud2))
+        self.sync = ApproximateTimeSynchronizer(self.subs, queue_size=1, slop=self.max_msgs_delay)
+        self.sync.registerCallback(self.callback)
+
+    def get_cam_calib_from_info_msg(self, msg):
+        """
+        Get camera calibration parameters from CameraInfo message.
+        :param msg: CameraInfo message
+        :return: E - extrinsics (4x4),
+                 K - intrinsics (3x3),
+                 D - distortion coefficients (5,)
+        """
+        assert isinstance(msg, CameraInfo)
+
+        time = rospy.Time(0)
+        timeout = rospy.Duration.from_sec(1.0)
+        try:
+            tf = self.tf_buffer.lookup_transform(self.robot_frame, msg.header.frame_id, time, timeout)
+        except Exception as ex:
+            rospy.logerr('Could not transform from camera %s to robot %s: %s.',
+                         msg.header.frame_id, self.robot_frame, ex)
+            raise ex
+
+        E = np.array(numpify(tf.transform), dtype=np.float32).reshape((4, 4))
+        K = np.array(msg.K, dtype=np.float32).reshape((3, 3))
+        D = np.array(msg.D, dtype=np.float32)
+
+        return E, K, D
+
+    def get_data(self, img_msgs, info_msgs, points_msg):
+        """
+        Get inputs for LSS model from image and camera info messages.
+        """
+        assert len(img_msgs) == len(info_msgs)
+        assert isinstance(img_msgs[0], CompressedImage)
+        assert isinstance(info_msgs[0], CameraInfo)
+        assert isinstance(points_msg, PointCloud2)
+        imgs = []
+        Ks = []
+        Es = []
+        for cam_i, (img_msg, info_msg) in enumerate(zip(img_msgs, info_msgs)):
+            img = self.cv_bridge.compressed_imgmsg_to_cv2(img_msg)
+            E, K, D = self.get_cam_calib_from_info_msg(info_msg)
+            imgs.append(img)
+            Ks.append(K)
+            Es.append(E)
+        # to arrays
+        imgs = np.stack(imgs)
+        Ks = np.stack(Ks)
+        Es = np.stack(Es)
+        cloud = numpify(points_msg)
+        if cloud.ndim > 1:
+            cloud = cloud.reshape(-1,)
+        points = position(cloud)
+        try:
+            tf = self.tf_buffer.lookup_transform(self.robot_frame, points_msg.header.frame_id, points_msg.header.stamp)
+        except Exception as ex:
+            rospy.logerr('Could not transform from camera %s to robot %s: %s.',
+                         points_msg.header.frame_id, self.robot_frame, ex)
+            raise ex
+        Tr = np.array(numpify(tf.transform), dtype=np.float32).reshape((4, 4))
+        points = transform_cloud(points, Tr)
+
+        return imgs, Ks, Es, points
+
+    def callback(self, *msgs):
+        rospy.logdebug('Received %d messages' % len(msgs))
+        t0 = time()
+        with self.proc_lock:
+            self.proc(*msgs)
+        rospy.logdebug('Processing time: %.3f [sec]' % (time() - t0))
+
+    def proc(self, *msgs):
+        n = len(msgs)
+        assert n % 2 == 1, 'Number of messages must be odd'
+        for i in range((n-1)//2):
+            assert isinstance(msgs[i], CompressedImage), 'First %d messages must be CompressedImage' % (n//2)
+            assert isinstance(msgs[i+n//2], CameraInfo), 'Last %d messages must be CameraInfo' % (n//2)
+            assert msgs[i].header.frame_id == msgs[i+n//2].header.frame_id, \
+                'Image and CameraInfo messages must have the same frame_id'
+        img_msgs = msgs[:n//2]
+        info_msgs = msgs[n//2:-1]
+        points_msg = msgs[-1]
+        assert isinstance(points_msg, PointCloud2)
+
+        imgs, Ks, Es, points = self.get_data(img_msgs, info_msgs, points_msg)
+        rospy.logdebug('imgs shape: %s' % str(imgs.shape))
+        rospy.logdebug('Ks shape: %s' % str(Ks.shape))
+        rospy.logdebug('Es shape: %s' % str(Es.shape))
+        rospy.logdebug('points shape: %s' % str(points.shape))
+
+        imgs = torch.from_numpy(imgs)
+        Ks = torch.from_numpy(Ks)
+        Es = torch.from_numpy(Es)
+        points = torch.from_numpy(points).T
+
+        Rs = Es[:, :3, :3]
+        ts = Es[:, :3, 3]
+
+        fig = plt.figure(figsize=(12, 8))
+        assert len(imgs) % 2 == 0, 'Number of images must be even'
+        n_rows, n_cols = 2, len(imgs) // 2
+        gs = mpl.gridspec.GridSpec(n_rows, n_cols)
+        gs.update(wspace=0.0, hspace=0.0, left=0.0, right=1.0, top=1.0, bottom=0.0)
+        H, W = imgs.shape[1], imgs.shape[2]
+        for imgi in range(len(imgs)):
+            ego_pts = ego_to_cam(points, Rs[imgi], ts[imgi], Ks[imgi])
+            mask = get_only_in_img_mask(ego_pts, H, W)
+            ax = plt.subplot(gs[imgi // n_cols, imgi % n_cols])
+            ax.imshow(imgs[imgi].numpy()[..., ::-1])
+            plt.scatter(ego_pts[0, mask], ego_pts[1, mask], c=points[2, mask],
+                        s=1, alpha=0.2, cmap='jet', vmin=-1, vmax=1)
+            plt.axis('off')
+        plt.savefig('points.png')
+        plt.close(fig)
+
+    def spin(self):
+        try:
+            rospy.spin()
+        except rospy.ROSInterruptException:
+            pass
+
+
+def main():
+    rospy.init_node('dataproc', anonymous=True, log_level=rospy.DEBUG)
+
+    img_topics = rospy.get_param('~img_topics', [])
+    camera_info_topics = rospy.get_param('~camera_info_topics', [])
+    points_topic = rospy.get_param('~points_topic', '/points')
+    robot_frame = rospy.get_param('~robot_frame', 'base_link')
+    max_msgs_delay = rospy.get_param('~max_msgs_delay', 0.1)
+
+    node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics, points_topic=points_topic,
+                    robot_frame=robot_frame, max_msgs_delay=max_msgs_delay)
+    node.start()
+    node.spin()
+
+
+if __name__ == '__main__':
+    main()
