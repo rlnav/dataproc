@@ -3,6 +3,7 @@
     <arg name="config" default="''"/>
     <arg name="rviz" default="true"/>
     <arg name="record" default="false"/>
+    <arg name="robot" default="husky"/>
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag"/> -->
 <!--    <arg name="bag" default="$(dirname)/../data/robingas/data/22-09-27-unhost/husky/husky_2022-09-27-15-01-44.bag"/> -->
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-06-30-cimicky_haj/husky_2022-06-30-15-58-37.bag"/> -->
@@ -21,6 +22,7 @@
         <arg name="bag" value="$(arg bag)"/>
         <arg name="rviz" value="false"/>
         <arg name="rate" value="1"/>
+        <arg name="robot" value="$(arg robot)"/>
     </include>
 
     <!-- Cloud preprocessing (filtering + deskewing) -->

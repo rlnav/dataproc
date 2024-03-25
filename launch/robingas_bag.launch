@@ -3,6 +3,7 @@
 <launch>
     <arg name="rviz" default="false" doc="Launch RViz for data visualization or not"/>
     <arg name="rate" default="1." doc="Playback rate"/>
+    <arg name="robot" default="husky" doc="Robot type"/>
     <arg name="delay" default="3.0" doc="Delay in the bag file [sec]"/>
     <arg name="start" default="0." doc="Start moment in a bag file [sec]"/>
     <arg name="debayer" default="false" doc="Debayer images or not"/>
@@ -138,8 +139,7 @@
 
     <!-- Visualization -->
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
-               args="-d $(dirname)/../config/rviz/robingas_tradr.rviz"/>
-<!--           args="-d $(dirname)/../config/rviz/robingas.rviz"/> -->
+          args="-d $(dirname)/../config/rviz/robingas_$(arg robot).rviz"/>
 
     <!-- Record new bag file with image topic -->
     <node if="$(arg record)" pkg="rosbag" type="record" name="rosbag_record_images"

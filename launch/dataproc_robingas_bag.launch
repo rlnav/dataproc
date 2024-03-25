@@ -1,5 +1,8 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <launch>
+    <arg name="rviz" default="false"/>
+
+    <arg name="robot" default="tradr"/>
     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag $(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57_loc.bag"/>
     <arg name="img_topics" default="['/camera_front/image_rect/compressed',
                                      '/camera_left/image_rect/compressed',
@@ -13,7 +16,9 @@
                                              '/camera_rear_right/camera_info',
                                              '/camera_right/camera_info',
                                              '/camera_up/camera_info']"/>
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag"/> -->
+
+<!--     <arg name="robot" default="husky"/> -->
+<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag $(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57_loc.bag"/> -->
 <!--     <arg name="img_topics" default="['/camera_front/image_rect/compressed', -->
 <!--                                      '/camera_left/image_rect/compressed', -->
 <!--                                      '/camera_rear/image_rect/compressed', -->
@@ -27,11 +32,11 @@
 <!--     <include file="$(dirname)/slam_robingas_bag.launch"> -->
     <include file="$(dirname)/robingas_bag.launch">
         <arg name="bag" value="$(arg bag)"/>
-        <arg name="rviz" value="true"/>
+        <arg name="rviz" value="$(arg rviz)"/>
+        <arg name="robot" value="$(arg robot)"/>
     </include>
 
-
-    <!-- DataProcessor -->
+    <!-- Data Processor -->
     <node pkg="dataproc" type="dataproc" name="dataproc" output="screen">
         <rosparam subst_value="true">
             robot_frame: 'base_link'
@@ -39,7 +44,8 @@
             camera_info_topics: $(arg camera_info_topics)
 <!--             points_topic: '/points_filtered' -->
             points_topic: '/points_deskewed'
-            max_msgs_delay: 0.2
+            max_msgs_delay: 0.3
+            bag_path: $(arg bag)
         </rosparam>
     </node>
 </launch>

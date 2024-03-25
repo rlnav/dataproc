@@ -2,16 +2,15 @@ from __future__ import division, absolute_import, print_function
 import os
 import torch
 import numpy as np
-import yaml
 from scipy.ndimage import rotate
-from scipy.spatial.transform import Rotation
 from tqdm import tqdm
 from cv_bridge import CvBridge
+from dataproc.io import append_to_yaml
 from jsk_recognition_msgs.msg import BoundingBox
 from monoforce.utils import slots, timing
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PoseArray, TransformStamped
-from tf.transformations import quaternion_from_matrix, euler_from_quaternion, quaternion_matrix
+from tf.transformations import quaternion_from_matrix, quaternion_matrix
 from std_msgs.msg import Float32MultiArray, MultiArrayDimension
 from grid_map_msgs.msg import GridMap
 from sensor_msgs.msg import PointCloud2, CompressedImage, Image
@@ -439,80 +438,61 @@ def get_camera_infos(bag_path, camera_info_topics, save=True, output_path=None):
                     # save intinsics and distortion coeffs to output_path yaml file
                     if save:
                         camera = topic.split('/')[1]
-                        output_path_cam = os.path.join(output_path, '%s.yaml' % camera)
-                        os.makedirs(os.path.dirname(output_path_cam), exist_ok=True)
-                        print('Saving to %s' % output_path_cam)
-                        with open(output_path_cam, 'w') as f:
-                            f.write('image_width: %d\n' % msg.width)
-                            f.write('image_height: %d\n' % msg.height)
-                            f.write('camera_name: %s\n' % camera)
-                            f.write('camera_matrix:\n')
-                            f.write('  rows: 3\n')
-                            f.write('  cols: 3\n')
-                            f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in K.reshape(-1)]))
-                            f.write('distortion_model: %s\n' % msg.distortion_model)
-                            f.write('distortion_coefficients:\n')
-                            f.write('  rows: 1\n')
-                            f.write('  cols: %d\n' % len(D))
-                            f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in D]))
-                        f.close()
+                        write_intrinsics_to_yaml(output_path, msg, camera)
                     break
     except ROSBagException as ex:
         print('Could not read %s: %s' % (bag_path, ex))
     return Ks, Ds
 
 
-def append_transformation(bag_paths, source_frame, target_frame, save=True, tf_buffer=None,
-                          matrix_name=None):
-    """
-    Append transformation from source_frame to target_frame to the yaml file
-    """
-    assert isinstance(bag_paths, list)
-    assert len(bag_paths) > 0, 'No bag files provided'
+def write_intrinsics_to_yaml(output_dir, msg, camera_name):
+    output_path_cam = os.path.join(output_dir, '%s.yaml' % camera_name)
+    os.makedirs(os.path.dirname(output_path_cam), exist_ok=True)
+    print('Saving to %s' % output_path_cam)
+    K = np.asarray(msg.K).reshape(3, 3)
+    D = np.asarray(msg.D)
+    with open(output_path_cam, 'w') as f:
+        f.write('image_width: %d\n' % msg.width)
+        f.write('image_height: %d\n' % msg.height)
+        f.write('camera_name: %s\n' % camera_name)
+        f.write('camera_matrix:\n')
+        f.write('  rows: 3\n')
+        f.write('  cols: 3\n')
+        f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in K.reshape(-1)]))
+        f.write('distortion_model: %s\n' % msg.distortion_model)
+        f.write('distortion_coefficients:\n')
+        f.write('  rows: 1\n')
+        f.write('  cols: %d\n' % len(D))
+        f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in D]))
+    f.close()
 
-    if tf_buffer is None:
-        tf_buffer = load_tf_buffer(bag_paths, tf_topics=['/tf_static'])
+
+def append_tf_to_yaml(output_path, source_frame, target_frame, tf_buffer,
+                      stamp=None, timeout=1.0, matrix_name=None):
+    """
+    Append transformation from source_frame to target_frame to a yaml file
+    """
+    assert isinstance(tf_buffer, BufferCore)
+    assert isinstance(source_frame, str)
+    assert isinstance(target_frame, str)
+    assert isinstance(output_path, str)
+
+    if stamp is None:
+        stamp = rospy.Time.now()
+    timeout = rospy.Duration(timeout)
     try:
-        transform = tf_buffer.lookup_transform_core(source_frame, target_frame, rospy.Time())
+        transform = tf_buffer.lookup_transform(source_frame, target_frame, stamp, timeout)
         Tr = numpify(transform.transform)
     except TransformException as ex:
         print('Could not find transformation from %s to %s.' % (source_frame, target_frame))
         return
-    print('Transformation from %s to %s:' % (source_frame, target_frame))
-    print(Tr)
-
-    if save:
-        bag_path = bag_paths[0]
-        output_path_pattern = '{dir}/{name}/calibration/transformations.yaml'
-        output_path = output_path_pattern.format(dir=os.path.dirname(bag_path),
-                                                 name=os.path.basename(bag_path).replace('.bag', ''))
-
-        if matrix_name is None:
-            matrix_name = f'T_{source_frame}__{target_frame}'
-        yaml_data_dict = {matrix_name:
-                              {'rows': 4,
-                               'cols': 4,
-                               'data': ['%.3f' % x for x in Tr.reshape(-1)]}}
-        # q = transform.transform.rotation
-        # t = transform.transform.translation
-        # yaml_data_dict = {f'{source_frame}__{target_frame}':
-        #                     {'q': {'x': q.x, 'y': q.y, 'z': q.z, 'w': q.w},
-        #                      't': {'x': t.x, 'y': t.y, 'z': t.z}}}
-        append_to_yaml(output_path, yaml_data_dict)
-
-
-def append_to_yaml(yaml_path, data_dict):
-    if not os.path.exists(yaml_path):
-        with open(yaml_path, 'w') as f:
-            yaml.dump(data_dict, f)
-    else:
-        with open(yaml_path, 'r') as f:
-            print('Updating yaml file: %s' % yaml_path)
-            cur_yaml = yaml.load(f, Loader=yaml.FullLoader)
-            cur_yaml.update(data_dict)
-
-        with open(yaml_path, 'w') as f:
-            yaml.safe_dump(cur_yaml, f)  # Also note the safe_dump
+    if matrix_name is None:
+        matrix_name = f'T_{source_frame}__{target_frame}'
+    yaml_data_dict = {matrix_name:
+                          {'rows': 4,
+                           'cols': 4,
+                           'data': ['%.3f' % x for x in Tr.reshape(-1)]}}
+    append_to_yaml(output_path, yaml_data_dict)
 
 
 def xyz_to_point(xyz):
