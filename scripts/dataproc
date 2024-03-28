@@ -42,7 +42,7 @@ def data_slicing():
     ds_slice.global_hm_cloud(vis=True)
 
 
-def create_global_gloud_map():
+def create_global_cloud_map():
     """
     Create global heightmap cloud from the sequence of point clouds
     """
@@ -292,59 +292,60 @@ def segmentation_demo():
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     i = np.random.choice(range(len(ds)))
 
-    cam = ds.cameras[0]
-    rgb, K = ds.get_image(i, camera=cam)
-    seg_vis = ds.get_segmentation(i, camera=cam)
-
-    rgb = np.asarray(rgb)
-    seg_vis = np.asarray(seg_vis)
-    print(rgb.shape, seg_vis.shape)
-
-    # Concatenate images for simultaneous view
-    combination = np.concatenate((rgb, seg_vis), axis=1)
-    combination = Image.fromarray(combination)
-    combination.show()
-
     pts = position(ds.get_cloud(i))
-    E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
-    E = np.asarray(E, dtype=np.float32).reshape((4, 4))
+    points = []
+    colors = []
+    n_cams = len(ds.cameras)
+    plt.figure(figsize=(n_cams * 5, 5))
+    plt.axis('off')
+    for cam_i in range(n_cams):
+        cam = ds.cameras[cam_i]
+        rgb, K = ds.get_image(i, camera=cam)
+        seg_vis = ds.get_segmentation(i, camera=cam)
 
-    pts = torch.as_tensor(pts)
-    E = torch.as_tensor(E)
-    K = torch.as_tensor(K)
+        rgb = np.asarray(rgb)
+        seg_vis = np.asarray(seg_vis)
 
-    cam_pts = ego_to_cam(pts.T, E[:3, :3], E[:3, 3], K).T
-    mask = get_only_in_img_mask(cam_pts.T, rgb.shape[0], rgb.shape[1])
-    cam_pts = cam_pts[mask]
-    print('Points in image:', cam_pts.shape)
+        E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
+        E = np.asarray(E, dtype=np.float32).reshape((4, 4))
 
-    # visualize
-    plt.figure(figsize=(10, 10))
-    # plt.imshow(rgb)
-    plt.imshow(seg_vis)
-    plt.scatter(cam_pts[:, 0], cam_pts[:, 1], s=1, c=pts[mask, 2], cmap='jet', alpha=0.5, vmin=-1, vmax=1)
-    plt.show()
+        pts = torch.as_tensor(pts)
+        E = torch.as_tensor(E)
+        K = torch.as_tensor(K)
 
-    # colorize point cloud with values from segmentation image
-    uv = cam_pts[:, :2].numpy().astype(int)
-    colors = seg_vis[uv[:, 1], uv[:, 0]]
+        cam_pts = ego_to_cam(pts.T, E[:3, :3], E[:3, 3], K).T
+        mask = get_only_in_img_mask(cam_pts.T, rgb.shape[0], rgb.shape[1])
+        cam_pts = cam_pts[mask]
+        # print('Points in image:', cam_pts.shape)
+
+        # visualize
+        plt.subplot(1, len(ds.cameras), cam_i + 1)
+        plt.imshow(seg_vis)
+        # plt.scatter(cam_pts[:, 0], cam_pts[:, 1], s=1, c=pts[mask, 2], cmap='jet', alpha=0.2, vmin=-1, vmax=1)
+
+        # colorize point cloud with values from segmentation image
+        uv = cam_pts[:, :2].numpy().astype(int)
+        seg_colors = seg_vis[uv[:, 1], uv[:, 0]]
+
+        points.append(pts[mask].numpy())
+        colors.append(seg_colors)
+
+    plt.savefig('segmentation_demo.png')
+    # plt.show()
+
+    points = np.vstack(points)
+    colors = np.vstack(colors)
 
     pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(pts.numpy())
-    pcd.paint_uniform_color([0.5, 0.5, 0.5])
-
-    pcd_cam = o3d.geometry.PointCloud()
-    pcd_cam.points = o3d.utility.Vector3dVector(pts[mask].numpy())
-    pcd_cam.colors = o3d.utility.Vector3dVector(colors / 255)
-    o3d.visualization.draw_geometries([pcd, pcd_cam])
-
-
+    pcd.points = o3d.utility.Vector3dVector(points)
+    pcd.colors = o3d.utility.Vector3dVector(colors / 255)
+    o3d.visualization.draw_geometries([pcd])
 
 
 def main():
     # data_slicing()
     # visualize_point_cloud_map()
-    # create_global_gloud_map()
+    # create_global_cloud_map()
     # check_interpolate_poses()
     # vis_camera_poses()
     # vis_trajectory()
