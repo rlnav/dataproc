@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from dataproc.cloudproc import hm_to_cloud, filter_grid
+from dataproc.cloudproc import filter_grid
 from dataproc.imgproc import denormalize_img
 from dataproc.transformations import transform_cloud
 from dataproc.utils import read_yaml, position
@@ -17,22 +17,21 @@ from scipy.spatial import cKDTree
 from mayavi import mlab
 
 from monoforce.datasets import RobinGas
-from monoforce.datasets.robingas import robingas_husky_seq_paths, oru_seq_paths
+from monoforce.datasets.robingas import robingas_husky_seq_paths, oru_seq_paths, robingas_tradr_seq_paths
 from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
 
 
-import rospkg
+# import rospkg
 # monoforce_path = rospkg.RosPack().get_path('monoforce')
 monoforce_path = '/home/ruslan/workspaces/traversability_ws/src/monoforce'
 dphys_cfg = DPhysConfig()
 dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
 lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg.yaml'))
 
-def data_slicing():
-    data_aug_conf = lss_cfg['data_aug_conf']
 
-    ds = RobinGas(robingas_husky_seq_paths[0], is_train=True, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
+def data_slicing():
+    ds = RobinGas(robingas_husky_seq_paths[0], lss_cfg=lss_cfg, dphys_cfg=dphys_cfg, is_train=True)
     ds_slice = ds[150:200]
     print("Full dataset contains samples", ds.ids)
     print("Sliced dataset contains samples", ds_slice.ids)
@@ -45,16 +44,13 @@ def create_global_gloud_map():
     """
     Create global heightmap cloud from the sequence of point clouds
     """
-    data_aug_conf = lss_cfg['data_aug_conf']
-
     dist_th = 0.1
-
     # paths = robingas_husky_seq_paths
     paths = oru_seq_paths
 
     for path in paths:
         print('Processing sequence:', path)
-        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
 
         # create global cloud
         poses = ds.get_poses()
@@ -86,17 +82,16 @@ def create_global_gloud_map():
         o3d.io.write_point_cloud(os.path.join(path, 'global_map.pcd'), pcd)
         o3d.visualization.draw_geometries([pcd, pcd_poses])
 
+
 def visualize_point_cloud_map():
     """
     Visualize point cloud map and trajectory point cloud
     """
-    data_aug_conf = lss_cfg['data_aug_conf']
-
     paths = robingas_husky_seq_paths
     # paths = oru_seq_paths
 
     for path in paths:
-        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
         poses = ds.get_poses()
 
         map_path = os.path.join(path, 'global_map.pcd')
@@ -199,7 +194,7 @@ def vis_camera_poses():
         assert os.path.exists(path)
 
         cfg = DPhysConfig()
-        ds = DEMPathData(path, dphys_cfg=cfg)
+        ds = DEMPathData(path, dphys_cfg=dphys_cfg)
 
         robot_pose = np.eye(4)
         robot_frame = 'base_link'
@@ -234,7 +229,7 @@ def vis_trajectory():
     # paths = oru_seq_paths
 
     for path in paths:
-        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
         poses = ds.get_poses()
         cam_poses = ds.get_poses_at_camera_stamps('camera_front')
         assert len(poses) == len(cam_poses)
@@ -249,46 +244,15 @@ def vis_trajectory():
         mlab.show()
 
 
-def sample_heightmap_at_img_pose():
-    from monoforce.datasets import RobinGasCamSynch
-
-    data_aug_conf = lss_cfg['data_aug_conf']
-
-    path = robingas_husky_seq_paths[0]
-
-    ds_synch = RobinGasCamSynch(path, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
-    # global_cloud = ds_synch.global_cloud(vis=False)
-
-    i = np.random.choice(len(ds_synch))
-    cloud_synch = ds_synch.get_cloud(i)
-
-    ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
-    cloud = ds.get_cloud(i)
-    cloud = position(cloud)
-
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(cloud)
-    pcd.paint_uniform_color([0, 0, 1])
-
-    pcd_synch = o3d.geometry.PointCloud()
-    pcd_synch.points = o3d.utility.Vector3dVector(cloud_synch)
-    pcd_synch.paint_uniform_color([1, 0, 0])
-
-    o3d.visualization.draw_geometries([pcd, pcd_synch])
-
-
 def vis_data():
     from monoforce.datasets import RobinGas, Rellis3D
 
-    data_aug_conf = lss_cfg['data_aug_conf']
-
-    # paths = robingas_husky_seq_paths
-    # paths = rellis3d_seq_paths
-    paths = oru_seq_paths + robingas_husky_seq_paths
+    paths = rellis3d_seq_paths
+    # paths = oru_seq_paths + robingas_husky_seq_paths + robingas_tradr_seq_paths
 
     for path in paths:
-        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, data_aug_conf=data_aug_conf, is_train=False, only_front_hm=True)
-        # ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, data_aug_conf=data_aug_conf, is_train=False)
+        # ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_hm=True)
+        ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         i = np.random.choice(range(len(ds)))
         print(f'Visualizing sample {i} from {os.path.basename(path)}...')
 
