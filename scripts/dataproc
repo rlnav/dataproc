@@ -1,0 +1,333 @@
+#! /usr/bin/env python3
+import os
+import torch
+import numpy as np
+import matplotlib.pyplot as plt
+from tqdm import tqdm
+from dataproc.cloudproc import hm_to_cloud, filter_grid
+from dataproc.imgproc import denormalize_img
+from dataproc.transformations import transform_cloud
+from dataproc.utils import read_yaml, position
+from dataproc.vis import draw_coord_frame, draw_coord_frames
+import open3d as o3d
+from scipy import interpolate
+from scipy.spatial.transform import Rotation
+from scipy.spatial.transform import Slerp
+from scipy.spatial import cKDTree
+from mayavi import mlab
+
+from monoforce.datasets import RobinGas
+from monoforce.datasets.robingas import robingas_husky_seq_paths, oru_seq_paths
+from monoforce.datasets.rellis3d import rellis3d_seq_paths
+from monoforce.config import DPhysConfig
+
+
+import rospkg
+# monoforce_path = rospkg.RosPack().get_path('monoforce')
+monoforce_path = '/home/ruslan/workspaces/traversability_ws/src/monoforce'
+dphys_cfg = DPhysConfig()
+dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
+lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg.yaml'))
+
+def data_slicing():
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    ds = RobinGas(robingas_husky_seq_paths[0], is_train=True, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
+    ds_slice = ds[150:200]
+    print("Full dataset contains samples", ds.ids)
+    print("Sliced dataset contains samples", ds_slice.ids)
+    # check if sliced dataset indixes is a subset of full dataset indixes
+    assert set(ds_slice.ids).issubset(set(ds.ids))
+    ds_slice.global_hm_cloud(vis=True)
+
+
+def create_global_gloud_map():
+    """
+    Create global heightmap cloud from the sequence of point clouds
+    """
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    dist_th = 0.1
+
+    # paths = robingas_husky_seq_paths
+    paths = oru_seq_paths
+
+    for path in paths:
+        print('Processing sequence:', path)
+        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+
+        # create global cloud
+        poses = ds.get_poses()
+        global_cloud = None
+        for i in tqdm(range(len(ds))):
+            cloud = ds.get_cloud(i)
+            T = poses[i]
+            cloud = transform_cloud(cloud, T)
+            points = position(cloud)
+            points = filter_grid(points, ds.dphys_cfg.grid_res, keep='first', log=False)
+            if i == 0:
+                global_cloud = points
+            else:
+                tree = cKDTree(global_cloud)
+                dists, idxs = tree.query(points, k=1)
+                new_pts_mask = dists > dist_th
+                new_points = points[new_pts_mask]
+                global_cloud = np.vstack((global_cloud, new_points))
+
+        # visualize global cloud
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(global_cloud)
+
+        pcd_poses = o3d.geometry.PointCloud()
+        pcd_poses.points = o3d.utility.Vector3dVector(poses[:, :3, 3])
+        pcd_poses.paint_uniform_color([1, 0, 0])
+
+        # save global cloud
+        o3d.io.write_point_cloud(os.path.join(path, 'global_map.pcd'), pcd)
+        o3d.visualization.draw_geometries([pcd, pcd_poses])
+
+def visualize_point_cloud_map():
+    """
+    Visualize point cloud map and trajectory point cloud
+    """
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    paths = robingas_husky_seq_paths
+    # paths = oru_seq_paths
+
+    for path in paths:
+        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+        poses = ds.get_poses()
+
+        map_path = os.path.join(path, 'global_map.pcd')
+        assert os.path.exists(map_path)
+        pcd = o3d.io.read_point_cloud(map_path)
+        # pcd = o3d.geometry.PointCloud()
+        # map_points = ds.global_cloud(vis=False)
+        # pcd.points = o3d.utility.Vector3dVector(map_points)
+
+        pcd_poses = o3d.geometry.PointCloud()
+        pcd_poses.points = o3d.utility.Vector3dVector(poses[:, :3, 3])
+        pcd_poses.paint_uniform_color([1, 0, 0])
+
+        o3d.visualization.draw_geometries([pcd, pcd_poses])
+
+
+def interpolate_poses(pose_timestamps, abs_poses, requested_timestamps, origin_timestamp):
+    """Interpolate between absolute poses.
+
+    Args:
+        pose_timestamps (list[int]): Timestamps of supplied poses. Must be in ascending order.
+        abs_poses (list[numpy.matrixlib.defmatrix.matrix]): SE3 matrices representing poses at the timestamps specified.
+        requested_timestamps (list[int]): Timestamps for which interpolated timestamps are required.
+        origin_timestamp (int): UNIX timestamp of origin frame. Poses will be reported relative to this frame.
+
+    Returns:
+        list[numpy.matrixlib.defmatrix.matrix]: Interpolated poses at the requested timestamps.
+    """
+    if len(pose_timestamps) != len(abs_poses):
+        raise ValueError('pose_timestamps and abs_poses must be the same length')
+
+    if pose_timestamps != sorted(pose_timestamps):
+        raise ValueError('pose_timestamps must be in ascending order')
+
+    # convert to numpy array
+    pose_timestamps = np.asarray(pose_timestamps)
+    abs_poses = np.asarray(abs_poses)
+
+    # convert to relative timestamps
+    rel_timestamps = pose_timestamps - origin_timestamp
+    requested_timestamps = np.asarray(requested_timestamps) - origin_timestamp
+
+    # interpolate using spherical linear interpolation
+    slerp = Slerp(rel_timestamps, Rotation.from_matrix(abs_poses[:, :3, :3]))
+    interp_rotations = slerp(requested_timestamps)
+
+    # interpolate translations
+    interp_translations = []
+    for i in range(3):
+        interp_translations.append(interpolate.interp1d(pose_timestamps, abs_poses[:, i, 3])(requested_timestamps))
+
+    interp_poses = []
+    for r, t in zip(interp_rotations, interp_translations):
+        pose = np.eye(4)
+        pose[:3, :3] = r.as_matrix()
+        pose[:3, 3] = t
+        interp_poses.append(pose)
+
+    return interp_poses
+
+
+def check_interpolate_poses():
+    pose_timestamps = np.arange(0, 10, 1).tolist()
+
+    pose0 = np.eye(4)
+    abs_poses = [pose0]
+    for i in range(1, len(pose_timestamps)):
+        # pose = np.eye(4)
+        # pose[:3, 3] += i * np.asarray([1, 0, 0])
+        # pose[:3, :3] = Rotation.from_euler('xyz', [0, 0, i * np.pi / 4]).as_matrix()
+
+        # spiral trajectory
+        pose = np.eye(4)
+        pose[:3, 3] += i * np.asarray([np.cos(i), np.sin(i), 1.])
+        pose[:3, :3] = Rotation.from_euler('xyz', [0, 0, i * np.pi / len(pose_timestamps)]).as_matrix()
+
+        abs_poses.append(pose)
+    abs_poses = np.asarray(abs_poses)
+
+    requested_timestamps = np.arange(0.5, 9.5, 1).tolist()
+    print('Pose timestamps:', pose_timestamps)
+    print('Requested timestamps:', requested_timestamps)
+    # print('Absolute poses', abs_poses)
+
+    origin_timestamp = 0.
+    interp_poses = interpolate_poses(pose_timestamps, abs_poses, requested_timestamps, origin_timestamp)
+    interp_poses = np.asarray(interp_poses)
+    print('Interpolated poses', interp_poses)
+
+    # visualize
+    draw_coord_frames(abs_poses, scale=0.2)
+    draw_coord_frames(interp_poses, scale=0.1)
+    mlab.show()
+
+
+def vis_camera_poses():
+    from monoforce.datasets import DEMPathData
+
+    for path in robingas_husky_seq_paths:
+        assert os.path.exists(path)
+
+        cfg = DPhysConfig()
+        ds = DEMPathData(path, dphys_cfg=cfg)
+
+        robot_pose = np.eye(4)
+        robot_frame = 'base_link'
+        camera_frames = ['camera_left', 'camera_right', 'camera_front', 'camera_rear']
+
+        cam_poses = []
+        for cam_frame in camera_frames:
+
+            T_robot_cam = ds.calib['transformations'][f'T_{robot_frame}__{cam_frame}']['data']
+            T_robot_cam = np.asarray(T_robot_cam, dtype=np.float32).reshape((4, 4))
+
+            cam_poses.append(T_robot_cam[np.newaxis])
+        cam_poses = np.concatenate(cam_poses, axis=0)
+
+        # draw coordinate frames
+        mlab.figure(size=(800, 800))
+        draw_coord_frame(robot_pose, scale=0.5)
+        draw_coord_frames(cam_poses, scale=0.1)
+        mlab.show()
+
+
+def vis_trajectory():
+    from monoforce.losses import translation_difference, rotation_difference
+
+    cfg = DPhysConfig()
+    cfg.from_yaml('../config/dphys_cfg.yaml')
+
+    lss_cfg = read_yaml('../config/lss_cfg.yaml')
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    paths = robingas_husky_seq_paths
+    # paths = oru_seq_paths
+
+    for path in paths:
+        ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=cfg)
+        poses = ds.get_poses()
+        cam_poses = ds.get_poses_at_camera_stamps('camera_front')
+        assert len(poses) == len(cam_poses)
+        trans_diff = translation_difference(torch.as_tensor(poses[:, :3, 3:4]), torch.as_tensor(cam_poses[:, :3, 3:4]))
+        rot_diff = rotation_difference(torch.as_tensor(poses[:, :3, :3]), torch.as_tensor(cam_poses[:, :3, :3]))
+        print('Translation difference:', trans_diff)
+        print('Rotation difference:', rot_diff)
+
+        mlab.figure(size=(800, 800))
+        draw_coord_frames(poses[::5], scale=0.5)
+        draw_coord_frames(cam_poses[::5], scale=1)
+        mlab.show()
+
+
+def sample_heightmap_at_img_pose():
+    from monoforce.datasets import RobinGasCamSynch
+
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    path = robingas_husky_seq_paths[0]
+
+    ds_synch = RobinGasCamSynch(path, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
+    # global_cloud = ds_synch.global_cloud(vis=False)
+
+    i = np.random.choice(len(ds_synch))
+    cloud_synch = ds_synch.get_cloud(i)
+
+    ds = RobinGas(path, data_aug_conf=data_aug_conf, dphys_cfg=dphys_cfg)
+    cloud = ds.get_cloud(i)
+    cloud = position(cloud)
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(cloud)
+    pcd.paint_uniform_color([0, 0, 1])
+
+    pcd_synch = o3d.geometry.PointCloud()
+    pcd_synch.points = o3d.utility.Vector3dVector(cloud_synch)
+    pcd_synch.paint_uniform_color([1, 0, 0])
+
+    o3d.visualization.draw_geometries([pcd, pcd_synch])
+
+
+def vis_data():
+    from monoforce.datasets import RobinGas, Rellis3D
+
+    data_aug_conf = lss_cfg['data_aug_conf']
+
+    # paths = robingas_husky_seq_paths
+    # paths = rellis3d_seq_paths
+    paths = oru_seq_paths + robingas_husky_seq_paths
+
+    for path in paths:
+        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, data_aug_conf=data_aug_conf, is_train=False, only_front_hm=True)
+        # ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, data_aug_conf=data_aug_conf, is_train=False)
+        i = np.random.choice(range(len(ds)))
+        print(f'Visualizing sample {i} from {os.path.basename(path)}...')
+
+        img, rot, tran, intrin, post_rot, post_tran, hm_lidar, hm_traj, map_pose = ds[i]
+        img = denormalize_img(img[0])
+
+        height_lidar, weights_lidar = hm_lidar[0], hm_lidar[1]
+        height_traj, weights_traj = hm_traj[0], hm_traj[1]
+
+        plt.figure(figsize=(20, 4))
+        plt.subplot(1, 5, 1)
+        plt.title('Front (0) Image')
+        plt.imshow(img)
+        plt.subplot(1, 5, 2)
+        plt.title('Height Trajectory')
+        plt.imshow(height_traj.squeeze().T, cmap='jet', vmin=-1, vmax=1, origin='lower')
+        plt.subplot(1, 5, 3)
+        plt.title('Weights Trajectory')
+        plt.imshow(weights_traj.squeeze().T, alpha=0.5, cmap='gray', origin='lower')
+        plt.subplot(1, 5, 4)
+        plt.title('Height Lidar')
+        plt.imshow(height_lidar.squeeze().T, cmap='jet', vmin=-1, vmax=1, origin='lower')
+        plt.subplot(1, 5, 5)
+        plt.title('Weights Lidar')
+        plt.imshow(weights_lidar.squeeze().T, alpha=0.5, cmap='gray', origin='lower')
+
+        plt.show()
+
+
+def main():
+    # data_slicing()
+    # visualize_point_cloud_map()
+    # create_global_gloud_map()
+    # check_interpolate_poses()
+    # vis_camera_poses()
+    # vis_trajectory()
+    # sample_heightmap_at_img_pose()
+    vis_data()
+
+
+if __name__ == '__main__':
+    main()
