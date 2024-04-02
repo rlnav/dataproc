@@ -3,13 +3,11 @@ import os
 import torch
 import numpy as np
 import matplotlib.pyplot as plt
-from PIL import Image
-from torchvision import transforms
 from tqdm import tqdm
 from dataproc.cloudproc import filter_grid
 from dataproc.imgproc import denormalize_img
 from dataproc.transformations import transform_cloud
-from dataproc.utils import read_yaml, position
+from dataproc.utils import read_yaml, position, normalize
 from dataproc.vis import draw_coord_frame, draw_coord_frames
 import open3d as o3d
 from scipy import interpolate
@@ -286,13 +284,22 @@ def vis_data():
 
 def segmentation_demo():
     from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
+    from detectron2.data.datasets.builtin_meta import COCO_CATEGORIES
+
+    void_id = 133
+    coco_classes = [i['name'].replace('-merged', '').replace('-other', '') for i in COCO_CATEGORIES] + ['void']
+    coco_colors = [(np.array(color['color']) / 255).tolist() for color in COCO_CATEGORIES] + [[0., 0., 0.]]
+    # selected_classes = ['person', 'tree', 'building']
+    selected_classes = np.copy(coco_classes)
+    # selected_classes = ['person']
 
     path = robingas_tradr_seq_paths[2]
 
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
-    i = np.random.choice(range(len(ds)))
+    # sample_i = np.random.choice(range(len(ds)))
+    sample_i = 0
 
-    pts = position(ds.get_cloud(i))
+    lidar_points = position(ds.get_cloud(sample_i))
     points = []
     colors = []
     n_cams = len(ds.cameras)
@@ -300,46 +307,64 @@ def segmentation_demo():
     plt.axis('off')
     for cam_i in range(n_cams):
         cam = ds.cameras[cam_i]
-        rgb, K = ds.get_image(i, camera=cam)
-        seg_vis = ds.get_segmentation(i, camera=cam)
+        rgb, K = ds.get_image(sample_i, camera=cam)
 
-        rgb = np.asarray(rgb)
-        seg_vis = np.asarray(seg_vis)
+        seg_label_cam = ds.get_seg_label(sample_i, camera=cam)
+        rgb = np.asarray(rgb) / 255.
+        seg_label_cam = np.asarray(seg_label_cam)
+        # transform segmentation labels to colors
+        seg_color_cam = np.zeros(rgb.shape, dtype=np.float32)
+        rgb_seg = np.copy(rgb)
+        for color_i, color in enumerate(coco_colors):
+            if coco_classes[color_i] not in selected_classes:
+                continue
+            # print(f'Colorizing {coco_classes[color_i]} with {color}')
+            seg_color_cam[seg_label_cam == color_i] = color
+        rgb_seg[seg_label_cam != void_id] = normalize(seg_color_cam + rgb)[seg_label_cam != void_id]
 
         E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
         E = np.asarray(E, dtype=np.float32).reshape((4, 4))
 
-        pts = torch.as_tensor(pts)
+        lidar_points = torch.as_tensor(lidar_points)
         E = torch.as_tensor(E)
         K = torch.as_tensor(K)
 
-        cam_pts = ego_to_cam(pts.T, E[:3, :3], E[:3, 3], K).T
-        mask = get_only_in_img_mask(cam_pts.T, rgb.shape[0], rgb.shape[1])
-        cam_pts = cam_pts[mask]
-        # print('Points in image:', cam_pts.shape)
+        cam_points = ego_to_cam(lidar_points.T, E[:3, :3], E[:3, 3], K).T
+        mask = get_only_in_img_mask(cam_points.T, rgb.shape[0], rgb.shape[1])
+        cam_points = cam_points[mask]
+        # print('Points in image:', cam_points.shape)
+
+        # colorize point cloud with values from segmentation image
+        uv = cam_points[:, :2].numpy().astype(int)
+        seg_colors = seg_color_cam[uv[:, 1], uv[:, 0]]
+
+        points.append(lidar_points[mask].numpy())
+        colors.append(seg_colors)
 
         # visualize
         plt.subplot(1, len(ds.cameras), cam_i + 1)
-        plt.imshow(seg_vis)
-        # plt.scatter(cam_pts[:, 0], cam_pts[:, 1], s=1, c=pts[mask, 2], cmap='jet', alpha=0.2, vmin=-1, vmax=1)
+        plt.imshow(rgb_seg)
+        # plt.scatter(cam_points[:, 0], cam_points[:, 1], s=1, c=lidar_points[mask, 2],
+        #             cmap='jet', alpha=0.2, vmin=-1, vmax=1)
 
-        # colorize point cloud with values from segmentation image
-        uv = cam_pts[:, :2].numpy().astype(int)
-        seg_colors = seg_vis[uv[:, 1], uv[:, 0]]
-
-        points.append(pts[mask].numpy())
-        colors.append(seg_colors)
-
-    plt.savefig('segmentation_demo.png')
-    # plt.show()
+    # plt.savefig('segmentation_demo.png')
+    plt.show()
 
     points = np.vstack(points)
     colors = np.vstack(colors)
-
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors / 255)
+    pcd.colors = o3d.utility.Vector3dVector(colors)
     o3d.visualization.draw_geometries([pcd])
+
+
+def semantic_heightmap():
+    from monoforce.datasets import RobinGas
+
+    path = robingas_tradr_seq_paths[2]
+    ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    for i in np.random.choice(range(len(ds)), 5):
+        ds.get_semantic_cloud(i, classes=['person'], vis=True)
 
 
 def main():
@@ -351,7 +376,8 @@ def main():
     # vis_trajectory()
     # sample_heightmap_at_img_pose()
     # vis_data()
-    segmentation_demo()
+    # segmentation_demo()
+    semantic_heightmap()
 
 
 if __name__ == '__main__':

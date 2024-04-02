@@ -35,12 +35,12 @@ def cam_to_ego(points, rot, trans, intrins):
     return points
 
 
-def get_only_in_img_mask(pts, H, W):
-    """pts should be 3 x N
+def get_only_in_img_mask(points, H, W):
+    """points should be 3 x N
     """
-    return (pts[2] > 0) &\
-           (pts[0] > 1) & (pts[0] < W - 1) &\
-           (pts[1] > 1) & (pts[1] < H - 1)
+    return (points[2] > 0) &\
+           (points[0] > 1) & (points[0] < W - 1) &\
+           (points[1] > 1) & (points[1] < H - 1)
 
 
 def get_rot(h):
