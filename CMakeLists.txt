@@ -10,9 +10,7 @@ catkin_package()
 include_directories()
 
 catkin_install_python(PROGRAMS
-  scripts/bagmerge
-  scripts/correct_camera_frames
-  scripts/save_sensor_data
+  nodes/dataproc
   nodes/play_tf_static
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
