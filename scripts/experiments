@@ -360,11 +360,20 @@ def segmentation_demo():
 
 def semantic_heightmap():
     from monoforce.datasets import RobinGas
+    from dataproc.cloudproc import hm_to_cloud, estimate_heightmap
 
     path = robingas_tradr_seq_paths[2]
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     for i in np.random.choice(range(len(ds)), 5):
-        ds.get_semantic_cloud(i, classes=['person'], vis=True)
+        points, colors = ds.get_semantic_cloud(i, classes=['person'], vis=False)
+
+        hm = estimate_heightmap(points, grid_res=0.1, d_max=6.4, hm_interp_method=None, h_max=1.5)
+        print(hm['z'].shape)
+        cloud = hm_to_cloud(hm['z'], d_max=6.4)
+
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(cloud)
+        o3d.visualization.draw_geometries([pcd])
 
 
 def main():
