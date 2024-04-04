@@ -1,0 +1,3 @@
+[submodule "packages/SEEM"]
+	path = packages/SEEM
+	url = https://github.com/UX-Decoder/Segment-Everything-Everywhere-All-At-Once

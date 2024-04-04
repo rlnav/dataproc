@@ -161,3 +161,7 @@ cython_debug/
 
 # datasets
 data/*
+
+# Pytorch weights
+*.pt
+*.pth
