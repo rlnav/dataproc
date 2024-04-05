@@ -27,7 +27,7 @@ from monoforce.config import DPhysConfig
 monoforce_path = '/home/ruslan/workspaces/traversability_ws/src/monoforce'
 dphys_cfg = DPhysConfig()
 dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
-lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg.yaml'))
+lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_tradr.yaml'))
 
 
 def data_slicing():
@@ -222,7 +222,7 @@ def vis_trajectory():
     cfg = DPhysConfig()
     cfg.from_yaml('../config/dphys_cfg.yaml')
 
-    lss_cfg = read_yaml('../config/lss_cfg.yaml')
+    lss_cfg = read_yaml('../config/lss_cfg_tradr.yaml')
     data_aug_conf = lss_cfg['data_aug_conf']
 
     paths = robingas_husky_seq_paths
