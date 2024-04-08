@@ -29,6 +29,12 @@ do
     TARGET_PATH=${DATA_PATH}/$SEQ
 #    TARGET_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$SEQ
 #    SOURCE_PATH=${DATA_PATH}/$SEQ
+
+    # if target path does not exist, create it
+    if [ ! -d "$TARGET_PATH" ]; then
+        mkdir -p $TARGET_PATH
+    fi
+
     echo "Synchronizing from source path ${SOURCE_PATH}"
     echo "to target path $TARGET_PATH"
 

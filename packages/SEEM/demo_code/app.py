@@ -71,6 +71,7 @@ with torch.cuda.device(0):
         for idx, img_fpath in tqdm(enumerate(img_files), total=len(img_files)):
             seg_fpath = os.path.join(seg_path, os.path.basename(img_fpath).replace('.png', '.npy'))
             vis_fpath = os.path.join(vis_path, os.path.basename(img_fpath))
+            # if already exists, skip
             if os.path.exists(seg_fpath) and os.path.exists(vis_fpath):
                 continue
 
