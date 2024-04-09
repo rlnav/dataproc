@@ -132,7 +132,7 @@ class DataProc:
             tf = self.tf_buffer.lookup_transform(self.map_frame, frame, stamp, rospy.Duration(1.0))
         except Exception as ex:
             rospy.logerr('Could not transform from %s to %s: %s.', frame, self.map_frame, ex)
-            raise ex
+            return None
         pose = np.array(numpify(tf.transform), dtype=np.float32).reshape((4, 4))
         return pose
 
@@ -249,9 +249,10 @@ class DataProc:
 
         # self.draw_points_in_images(imgs, Ks, Es, points)
         lidar_pose = self.get_map_pose(frame=self.lidar_frame, stamp=stamp)
-        rospy.logdebug('lidar_pose shape: %s' % str(lidar_pose.shape))
 
         # save data
+        if lidar_pose is None:
+            return
         rospy.loginfo('Saving data sample to %s' % self.output_path)
         self.save_data(imgs, info_msgs, points, lidar_pose, stamp)
 

@@ -13,6 +13,7 @@ SEQUENCES=(
             'robingas/data/22-06-30-cimicky_haj/husky_2022-06-30-15-58-37/'
             'robingas/data/22-08-12-cimicky_haj/marv/ugv_2022-08-12-15-18-34/'
             'robingas/data/22-08-12-cimicky_haj/marv/ugv_2022-08-12-16-37-03/'
+            'robingas/data/22-06-30-cimicky_haj/ugv_2022-06-30-11-30-57/'
             'robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22/'
             'robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42/'
             'robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57/'

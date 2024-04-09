@@ -46,7 +46,8 @@ def create_global_cloud_map():
     """
     dist_th = 0.1
     # paths = robingas_husky_seq_paths
-    paths = oru_seq_paths
+    # paths = oru_seq_paths
+    paths = robingas_tradr_seq_paths[-1:]
 
     for path in paths:
         print('Processing sequence:', path)
@@ -381,7 +382,7 @@ def semantic_heightmap():
         #                         grid_res=dphys_cfg.grid_res, d_max=dphys_cfg.d_max,
         #                         hm_interp_method=dphys_cfg.hm_interp_method, h_max=dphys_cfg.h_max)
 
-        heightmap = ds.get_rigid_heightmap(i, rigid_classes=classes)
+        heightmap = ds.get_terrain_heightmap(i, rigid_classes=classes)
 
         plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
