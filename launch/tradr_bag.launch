@@ -26,16 +26,6 @@
           args="--clock --delay $(arg delay) --rate $(arg rate) --start $(arg start) $(arg bag)">
         <remap from="os_cloud_node/destaggered_points" to="points"/>
         <remap from="points_filtered_kontron" to="points"/>
-
-        <remap from="/camera_front_resync/image_color/compressed" to="/camera_front/image_color/compressed"/>
-        <remap from="/camera_left_resync/image_color/compressed" to="/camera_left/image_color/compressed"/>
-        <remap from="/camera_rear_resync/image_color/compressed" to="/camera_rear/image_color/compressed"/>
-        <remap from="/camera_right_resync/image_color/compressed" to="/camera_right/image_color/compressed"/>
-
-        <remap from="/camera_front_resync/camera_info" to="/camera_front/camera_info"/>
-        <remap from="/camera_left_resync/camera_info" to="/camera_left/camera_info"/>
-        <remap from="/camera_rear_resync/camera_info" to="/camera_rear/camera_info"/>
-        <remap from="/camera_right_resync/camera_info" to="/camera_right/camera_info"/>
     </node>
 
     <!-- Omni camera to separate images -->

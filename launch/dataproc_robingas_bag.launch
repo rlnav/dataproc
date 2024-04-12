@@ -1,14 +1,17 @@
 <?xml version="1.0" encoding="UTF-8" ?>
 <launch>
     <arg name="rviz" default="false"/>
-
     <arg name="robot" default="tradr"/>
+    <arg name="max_msgs_delay" default="0.5"/>
+
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag -->
 <!--                              $(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57_loc.bag"/> -->
 <!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag -->
 <!--                              $(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42_loc.bag"/> -->
-    <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag
-                             $(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22_loc.bag"/>
+<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag -->
+<!--                              $(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22_loc.bag"/> -->
+    <arg name="bag" default="$(dirname)/../data/robingas/data/22-06-30-cimicky_haj/ugv_2022-06-30-11-30-57.bag
+                             $(dirname)/../data/robingas/data/22-06-30-cimicky_haj/ugv_2022-06-30-11-30-57_loc.bag"/>
     <arg name="img_topics" default="['/camera_front/image_rect/compressed',
                                      '/camera_left/image_rect/compressed',
                                      '/camera_rear_left/image_rect/compressed',
@@ -45,12 +48,12 @@
     <!-- Data Processor -->
     <node pkg="dataproc" type="dataproc" name="dataproc" output="screen">
         <rosparam subst_value="true">
-            robot_frame: 'base_link'
+            robot_frame: base_link
             img_topics: $(arg img_topics)
             camera_info_topics: $(arg camera_info_topics)
 <!--             points_topic: '/points_filtered' -->
             points_topic: '/points_deskewed'
-            max_msgs_delay: 0.2
+            max_msgs_delay: $(arg max_msgs_delay)
             bag_path: $(arg bag)
         </rosparam>
     </node>
