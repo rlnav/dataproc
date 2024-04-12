@@ -248,30 +248,31 @@ def vis_trajectory():
 def vis_data():
     from monoforce.datasets import RobinGas, Rellis3D
 
-    paths = rellis3d_seq_paths
+    # paths = rellis3d_seq_paths
     # paths = oru_seq_paths + robingas_husky_seq_paths + robingas_tradr_seq_paths
+    paths = robingas_tradr_seq_paths
 
     for path in paths:
-        # ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_hm=True)
-        ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_hm=False)
+        # ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         i = np.random.choice(range(len(ds)))
         print(f'Visualizing sample {i} from {os.path.basename(path)}...')
 
-        img, rot, tran, intrin, post_rot, post_tran, hm_lidar, hm_traj, map_pose = ds[i]
+        img, rot, tran, intrin, post_rot, post_tran, hm_lidar, hm_terrain = ds[i]
         img = denormalize_img(img[0])
 
         height_lidar, weights_lidar = hm_lidar[0], hm_lidar[1]
-        height_traj, weights_traj = hm_traj[0], hm_traj[1]
+        height_traj, weights_traj = hm_terrain[0], hm_terrain[1]
 
         plt.figure(figsize=(20, 4))
         plt.subplot(1, 5, 1)
         plt.title('Front (0) Image')
         plt.imshow(img)
         plt.subplot(1, 5, 2)
-        plt.title('Height Trajectory')
+        plt.title('Height Terrain')
         plt.imshow(height_traj.squeeze().T, cmap='jet', vmin=-1, vmax=1, origin='lower')
         plt.subplot(1, 5, 3)
-        plt.title('Weights Trajectory')
+        plt.title('Weights Terrain')
         plt.imshow(weights_traj.squeeze().T, alpha=0.5, cmap='gray', origin='lower')
         plt.subplot(1, 5, 4)
         plt.title('Height Lidar')
@@ -382,7 +383,7 @@ def semantic_heightmap():
         #                         grid_res=dphys_cfg.grid_res, d_max=dphys_cfg.d_max,
         #                         hm_interp_method=dphys_cfg.hm_interp_method, h_max=dphys_cfg.h_max)
 
-        heightmap = ds.get_terrain_heightmap(i, rigid_classes=classes)
+        heightmap = ds.get_terrain_heightmap(i, terrain_classes=classes)
 
         plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
@@ -406,9 +407,9 @@ def main():
     # vis_camera_poses()
     # vis_trajectory()
     # sample_heightmap_at_img_pose()
-    # vis_data()
+    vis_data()
     # segmentation_demo()
-    semantic_heightmap()
+    # semantic_heightmap()
 
 
 if __name__ == '__main__':
