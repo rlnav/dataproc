@@ -22,16 +22,17 @@ import glob
 from tqdm import tqdm
 
 
+file_path = os.path.dirname(os.path.abspath(__file__))
+
 def parse_option():
     parser = argparse.ArgumentParser('SEEM Demo', add_help=False)
     parser.add_argument('--imgs-path', metavar="FILE", help='path to data directory')
-    parser.add_argument('--conf-files', default="configs/seem/seem_focall_lang.yaml", metavar="FILE",
+    parser.add_argument('--conf-files', default=os.path.join(file_path, "configs/seem/seem_focall_lang.yaml"), metavar="FILE",
                         help='path to config file', )
-    parser.add_argument('--pretrained-pth', default="../seem_focall_v1.pt", metavar="FILE",
+    parser.add_argument('--pretrained-pth', default=os.path.join(file_path, "../seem_focall_v1.pt"), metavar="FILE",
                         help='path to pretrained model')
     parser.add_argument('--resized-width', type=int, default=512, help='resized width')
     args = parser.parse_args()
-
     return args
 
 
