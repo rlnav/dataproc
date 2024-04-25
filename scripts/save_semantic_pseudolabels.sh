@@ -1,13 +1,16 @@
 #!/bin/bash
 
-#DATA_PATH=/mnt/personal/agishrus/data/datasets
-DATA_PATH=/media/ruslan/data/datasets
+DATA_PATH=/mnt/personal/agishrus/data/datasets
+#DATA_PATH=/media/ruslan/data/datasets
 
 SEQUENCES=(
             'RobinGas/husky_oru/radarize__2024-02-07-10-47-13_0'
             'RobinGas/husky_oru/radarize__2023-08-16-11-24-37_0'
             'RobinGas/husky_oru/radarize__2023-08-16-11-09-06_0'
             'RobinGas/husky_oru/radarize__2023-08-16-11-02-33_0'
+            'RobinGas/husky_oru/radarize__2023-08-16-11-44-56_0'
+            'RobinGas/husky_oru/radarize__2023-08-16-11-37-14_0'
+            'RobinGas/husky_oru/radarize__2023-08-16-11-54-42_0'
             'Robingas/husky/husky_2022-09-27-15-01-44'
             'Robingas/husky/husky_2022-09-27-10-33-15'
             'Robingas/husky/husky_2022-10-27-15-33-57'
