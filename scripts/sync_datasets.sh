@@ -1,23 +1,24 @@
 #!/bin/bash
 
 # This script synchronizes data sequences from a remote server
-DATA_PATH=/media/ruslan/data
-#DATA_PATH=/media/ruslan/SSD/data
+DATA_PATH=/media/ruslan/data/datasets
+#DATA_PATH=/media/ruslan/SSD/data/datasets
 
 # list of sequences to process
 SEQUENCES=(
-            'robingas/data/22-09-27-unhost/husky/husky_2022-09-27-15-01-44/'
-            'robingas/data/22-09-27-unhost/husky/husky_2022-09-27-10-33-15/'
-            'robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57/'
-            'robingas/data/22-09-23-unhost/husky/husky_2022-09-23-12-38-31/'
-            'robingas/data/22-06-30-cimicky_haj/husky_2022-06-30-15-58-37/'
-            'robingas/data/22-08-12-cimicky_haj/marv/ugv_2022-08-12-15-18-34/'
-            'robingas/data/22-08-12-cimicky_haj/marv/ugv_2022-08-12-16-37-03/'
-            'robingas/data/22-06-30-cimicky_haj/ugv_2022-06-30-11-30-57/'
-            'robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22/'
-            'robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42/'
-            'robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57/'
+    'RobinGas/husky/husky_2022-10-27-15-33-57/'
+    'RobinGas/husky/husky_2022-09-27-10-33-15/'
+    'RobinGas/husky/husky_2022-09-27-15-01-44/'
+    'RobinGas/husky/husky_2022-09-23-12-38-31/'
+    'RobinGas/husky/husky_2022-06-30-15-58-37/'
+    'RobinGas/marv/ugv_2022-08-12-16-37-03/'
+    'RobinGas/marv/ugv_2022-08-12-15-18-34/'
+    'RobinGas/tradr/ugv_2022-10-20-14-30-57/'
+    'RobinGas/tradr/ugv_2022-10-20-14-05-42/'
+    'RobinGas/tradr/ugv_2022-10-20-13-58-22/'
+    'RobinGas/husky_oru/radarize__2024-02-07-10-47-13_0/'
 )
+#SEQUENCES=('datasets/Rellis3D/')
 
 USER_NAME=agishrus
 SERVER=login3.rci.cvut.cz
@@ -26,10 +27,10 @@ SERVER=login3.rci.cvut.cz
 # shellcheck disable=SC2068
 for SEQ in ${SEQUENCES[@]};
 do
-    SOURCE_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$SEQ
+    SOURCE_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/datasets/$SEQ
     TARGET_PATH=${DATA_PATH}/$SEQ
-#    TARGET_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$SEQ
 #    SOURCE_PATH=${DATA_PATH}/$SEQ
+#    TARGET_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/datasets/$SEQ
 
     # if target path does not exist, create it
     if [ ! -d "$TARGET_PATH" ]; then

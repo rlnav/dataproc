@@ -7,6 +7,8 @@
     <!-- Robot data: from bag file -->
     <include file="$(dirname)/os_replay.launch">
         <arg name="rviz" value="false"/>
+        <arg name="range_filter" value="true"/>
+        <arg name="deskewing" value="true"/>
     </include>
 
     <!-- SLAM -->
@@ -14,7 +16,7 @@
         <arg name="cloud" value="ouster/points_deskewed"/>
         <arg name="odom_frame" value="odom"/>
         <arg name="robot_frame" value="base_link"/>
-        <arg name="lidar_beams" default="32"/>
+        <arg name="config" default="oru"/>
     </include>
 
     <!-- RVIZ -->

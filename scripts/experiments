@@ -16,8 +16,8 @@ from scipy.spatial.transform import Slerp
 from scipy.spatial import cKDTree
 from mayavi import mlab
 
-from monoforce.datasets import RobinGas
-from monoforce.datasets.robingas import robingas_husky_seq_paths, oru_seq_paths, robingas_tradr_seq_paths
+from monoforce.datasets import RobinGas, Rellis3D
+from monoforce.datasets.robingas import robingas_seq_paths
 from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
 
@@ -31,7 +31,7 @@ lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_tradr.yaml'))
 
 
 def data_slicing():
-    ds = RobinGas(robingas_husky_seq_paths[0], lss_cfg=lss_cfg, dphys_cfg=dphys_cfg, is_train=True)
+    ds = RobinGas(robingas_seq_paths['husky'][0], lss_cfg=lss_cfg, dphys_cfg=dphys_cfg, is_train=True)
     ds_slice = ds[150:200]
     print("Full dataset contains samples", ds.ids)
     print("Sliced dataset contains samples", ds_slice.ids)
@@ -45,9 +45,9 @@ def create_global_cloud_map():
     Create global heightmap cloud from the sequence of point clouds
     """
     dist_th = 0.1
-    # paths = robingas_husky_seq_paths
+    # paths = robingas_seq_paths['husky']
     # paths = oru_seq_paths
-    paths = robingas_tradr_seq_paths[-1:]
+    paths = robingas_seq_paths['tradr'][-1:]
 
     for path in paths:
         print('Processing sequence:', path)
@@ -88,8 +88,8 @@ def visualize_point_cloud_map():
     """
     Visualize point cloud map and trajectory point cloud
     """
-    paths = robingas_husky_seq_paths
-    # paths = oru_seq_paths
+    # paths = robingas_seq_paths['husky']
+    paths = oru_husky_seq_paths
 
     for path in paths:
         ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
@@ -189,13 +189,13 @@ def check_interpolate_poses():
 
 
 def vis_camera_poses():
-    from monoforce.datasets import DEMPathData
+    from monoforce.datasets import RobinGasBase
 
-    for path in robingas_husky_seq_paths:
+    for path in robingas_seq_paths['husky']:
         assert os.path.exists(path)
 
         cfg = DPhysConfig()
-        ds = DEMPathData(path, dphys_cfg=dphys_cfg)
+        ds = RobinGasBase(path, dphys_cfg=dphys_cfg)
 
         robot_pose = np.eye(4)
         robot_frame = 'base_link'
@@ -226,7 +226,7 @@ def vis_trajectory():
     lss_cfg = read_yaml('../config/lss_cfg_tradr.yaml')
     data_aug_conf = lss_cfg['data_aug_conf']
 
-    paths = robingas_husky_seq_paths
+    paths = robingas_seq_paths['husky']
     # paths = oru_seq_paths
 
     for path in paths:
@@ -249,8 +249,8 @@ def vis_data():
     from monoforce.datasets import RobinGas, Rellis3D
 
     # paths = rellis3d_seq_paths
-    # paths = oru_seq_paths + robingas_husky_seq_paths + robingas_tradr_seq_paths
-    paths = robingas_tradr_seq_paths
+    # paths = oru_seq_paths + robingas_seq_paths['husky'] + robingas_seq_paths['tradr']
+    paths = robingas_seq_paths['tradr']
 
     for path in paths:
         ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_hm=False)
@@ -295,7 +295,7 @@ def segmentation_demo():
     selected_classes = np.copy(coco_classes)
     # selected_classes = ['person']
 
-    path = robingas_tradr_seq_paths[2]
+    path = robingas_seq_paths['tradr'][2]
 
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     # sample_i = np.random.choice(range(len(ds)))
@@ -365,10 +365,7 @@ def semantic_heightmap():
     from monoforce.config import DPhysConfig
     from dataproc.cloudproc import hm_to_cloud, estimate_heightmap
 
-    path = robingas_tradr_seq_paths[2]
-    dphys_cfg = DPhysConfig()
-    dphys_cfg.from_yaml('../config/dphys_cfg.yaml')
-
+    path = robingas_seq_paths['tradr'][2]
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     classes = ['person', 'tree', 'building']
     for i in np.random.choice(range(len(ds)), 5):
@@ -399,6 +396,49 @@ def semantic_heightmap():
         # o3d.visualization.draw_geometries([pcd])
 
 
+def cloud_to_mesh():
+    path = robingas_seq_paths['husky_oru'][0]
+    cloud_path = os.path.join(path, 'global_map.pcd')
+    mesh_path = os.path.join(path, 'global_map.obj')
+    assert os.path.exists(cloud_path)
+    pcd = o3d.io.read_point_cloud(cloud_path)
+    # o3d.visualization.draw_geometries([pcd])
+    print('Estimating normals...')
+    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug):
+        pcd.estimate_normals()
+        pcd.orient_normals_consistent_tangent_plane(100)
+    # o3d.visualization.draw_geometries([pcd], point_show_normal=True)
+
+    print('Run Poisson surface reconstruction...')
+    with o3d.utility.VerbosityContextManager(o3d.utility.VerbosityLevel.Debug):
+        mesh, densities = o3d.geometry.TriangleMesh.create_from_point_cloud_poisson(pcd, depth=9)
+    print(mesh)
+    # mesh.paint_uniform_color([0.7, 0.7, 0.7])
+    # save mesh as obj file
+    o3d.io.write_triangle_mesh(mesh_path, mesh)
+
+    # load mesh
+    assert os.path.exists(mesh_path)
+    mesh = o3d.io.read_triangle_mesh(mesh_path)
+    o3d.visualization.draw_geometries([mesh])
+
+
+def data_test():
+    # paths = rellis3d_seq_paths
+    # Data = Rellis3D
+    # lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_husky.yaml'))
+
+    paths = robingas_seq_paths['tradr']
+    Data = RobinGas
+    lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_tradr.yaml'))
+    for path in paths:
+        ds = Data(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg, is_train=True)
+        # print('Dataset length:', len(ds))
+        for sample in tqdm(ds, total=len(ds)):
+            img, rot, tran, intrin, post_rot, post_tran, hm_geom, hm_terrain = sample
+            # print(img.shape, rot.shape, tran.shape, intrin.shape, post_rot.shape, post_tran.shape,
+            #       hm_geom[0].shape, hm_terrain[0].shape)
+
 def main():
     # data_slicing()
     # visualize_point_cloud_map()
@@ -407,9 +447,11 @@ def main():
     # vis_camera_poses()
     # vis_trajectory()
     # sample_heightmap_at_img_pose()
-    vis_data()
+    # vis_data()
     # segmentation_demo()
     # semantic_heightmap()
+    cloud_to_mesh()
+    # data_test()
 
 
 if __name__ == '__main__':
