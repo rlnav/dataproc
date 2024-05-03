@@ -2,12 +2,10 @@
 
 import os
 from threading import RLock
-
 import cv2
 import numpy as np
 import torch
 from numpy.lib.recfunctions import unstructured_to_structured
-
 import rospy
 from cv_bridge import CvBridge
 from dataproc.io import append_to_csv, write_to_csv
@@ -33,6 +31,7 @@ class DataProc:
                  map_frame='map',
                  max_msgs_delay=0.5,
                  output_path='',
+                 save_time_period=1.0
                  ):
         self.map_frame = map_frame
         self.robot_frame = robot_frame
@@ -47,6 +46,7 @@ class DataProc:
         self.proc_lock = RLock()
         self.max_msgs_delay = max_msgs_delay
         self.output_path = output_path
+        self.rate = rospy.Rate(1.0 / save_time_period)
 
     def start(self):
         """
@@ -137,11 +137,12 @@ class DataProc:
         return pose
 
     def callback(self, *msgs):
-        rospy.logdebug('Received %d messages' % len(msgs))
-        t0 = time()
         with self.proc_lock:
+            rospy.logdebug('Received %d messages' % len(msgs))
+            t0 = time()
             self.proc(*msgs)
-        rospy.logdebug('Processing time: %.3f [sec]' % (time() - t0))
+            rospy.logdebug('Processing time: %.3f [sec]' % (time() - t0))
+            self.rate.sleep()
 
     def draw_points_in_images(self, imgs, Ks, Es, points, output_file='points.png'):
         try:
@@ -273,10 +274,11 @@ def main():
     max_msgs_delay = rospy.get_param('~max_msgs_delay', 0.1)
     bag_path = rospy.get_param('~bag_path', '')
     output_path = bag_path.split()[0].replace('.bag', '')
+    save_time_period = rospy.get_param('~save_time_period', 1.0)
 
     node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics, points_topic=points_topic,
                     robot_frame=robot_frame, max_msgs_delay=max_msgs_delay,
-                    output_path=output_path)
+                    output_path=output_path, save_time_period=save_time_period)
     node.start()
     node.spin()
 
