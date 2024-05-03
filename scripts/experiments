@@ -22,12 +22,11 @@ from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
 
 
-# import rospkg
-# monoforce_path = rospkg.RosPack().get_path('monoforce')
-monoforce_path = '/home/ruslan/workspaces/traversability_ws/src/monoforce'
+monoforce_path = '../../monoforce'
+robot = 'husky_oru'
 dphys_cfg = DPhysConfig()
 dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
-lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_tradr.yaml'))
+lss_cfg = read_yaml(os.path.join(monoforce_path, f'config/lss_cfg_{robot}.yaml'))
 
 
 def data_slicing():
@@ -243,11 +242,10 @@ def vis_data():
     from monoforce.datasets import RobinGas, Rellis3D
 
     # paths = rellis3d_seq_paths
-    # paths = robingas_seq_paths['husky_oru'] + robingas_seq_paths['husky'] + robingas_seq_paths['tradr']
-    paths = robingas_seq_paths['tradr']
+    paths = robingas_seq_paths[robot]
 
     for path in paths:
-        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_hm=False)
+        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=True)
         # ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         i = np.random.choice(range(len(ds)))
         print(f'Visualizing sample {i} from {os.path.basename(path)}...')
@@ -361,7 +359,6 @@ def semantic_heightmap():
 
     path = robingas_seq_paths['tradr'][2]
     ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
-    classes = ['person', 'tree', 'building']
     for i in np.random.choice(range(len(ds)), 5):
         # seg_points, seg_colors = ds.get_semantic_cloud(i, classes=classes, vis=False)
         # seg_colors = normalize(seg_colors)
@@ -374,7 +371,7 @@ def semantic_heightmap():
         #                         grid_res=dphys_cfg.grid_res, d_max=dphys_cfg.d_max,
         #                         hm_interp_method=dphys_cfg.hm_interp_method, h_max=dphys_cfg.h_max)
 
-        heightmap = ds.get_terrain_heightmap(i, terrain_classes=classes)
+        heightmap = ds.get_terrain_height_map(i)
 
         plt.figure(figsize=(10, 5))
         plt.subplot(1, 2, 1)
@@ -433,19 +430,73 @@ def data_test():
             # print(img.shape, rot.shape, tran.shape, intrin.shape, post_rot.shape, post_tran.shape,
             #       hm_geom[0].shape, hm_terrain[0].shape)
 
+
+def fov_masking():
+    from skimage.draw import polygon
+
+    robot = np.random.choice(['husky', 'husky_oru', 'tradr'])
+    path = np.random.choice(robingas_seq_paths[robot])
+
+    ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=False)
+    i = np.random.choice(range(len(ds)))
+    print(f'Visualizing sample {i} from {os.path.basename(path)}...')
+
+    img, K = ds.get_image(i)
+    img = np.asarray(img)
+    print('Image shape:', img.shape)
+
+    # get fov from camera intrinsics
+    img_h, img_w = img.shape[:2]
+    fx, fy = K[0, 0], K[1, 1]
+
+    fov_x = 2 * np.arctan2(img_h, 2 * fx)
+    fov_y = 2 * np.arctan2(img_w, 2 * fy)
+
+    print("Field of View (degrees):")
+    fov_x_deg = np.rad2deg(fov_x)
+    fov_y_deg = np.rad2deg(fov_y)
+    print(f"  {fov_x_deg = :.1f}\N{DEGREE SIGN}")
+    print(f"  {fov_y_deg = :.1f}\N{DEGREE SIGN}")
+
+    # camera frustum mask
+    d = ds.dphys_cfg.d_max
+    res = ds.dphys_cfg.grid_res
+    h, w = 2 * d / res, 2 * d / res
+    h, w = int(h), int(w)
+    mask = np.zeros((h, w))
+
+    to_grid = lambda x: np.array([x[1], x[0]]) / res + np.array([h // 2, w // 2])
+    A = to_grid((0, 0))
+    B = to_grid((d, d * np.tan(fov_y / 2)))
+    C = to_grid((d, -d * np.tan(fov_y / 2)))
+
+    # draw triangle
+    rr, cc = polygon([A[0], B[0], C[0]], [A[1], B[1], C[1]], mask.shape)
+    mask[rr, cc] = 1
+
+    plt.figure(figsize=(10, 5))
+    plt.subplot(1, 2, 1)
+    plt.imshow(img)
+    plt.subplot(1, 2, 2)
+    plt.imshow(mask, cmap='gray', origin='lower')
+    plt.show()
+
+
+
 def main():
-    data_slicing()
+    # data_slicing()
     # visualize_point_cloud_map()
     # create_global_cloud_map()
     # check_interpolate_poses()
     # vis_camera_poses()
     # vis_trajectory()
     # sample_heightmap_at_img_pose()
-    # vis_data()
+    vis_data()
     # segmentation_demo()
     # semantic_heightmap()
     # cloud_to_mesh()
     # data_test()
+    # fov_masking()
 
 
 if __name__ == '__main__':
