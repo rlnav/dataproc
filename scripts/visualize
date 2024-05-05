@@ -30,19 +30,25 @@ def vis_data(dataset, robot='husky'):
 
 
 def save_visuals():
+    robot = 'husky_oru'
     dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
-    lss_config_path = '../../monoforce/config/lss_cfg_husky_oru.yaml'
-    # data_paths = robingas_seq_paths['husky_oru']
-    data_paths = ['/media/ruslan/SSD/data/datasets/RobinGas/husky_oru/radarize__2023-08-16-11-02-33_0/']
+    lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
+    data_paths = robingas_seq_paths[robot]
+    # data_paths = ['/media/ruslan/SSD/data/bags/ORU/2024_05_01_Husky_Ruslan_Viking_hills_dense/bags/radarize__2024-05-01-15-48-29_0/']
+
+    lss_config = read_yaml(lss_config_path)
+    dphys_cfg = DPhysConfig()
+    dphys_cfg.from_yaml(dphys_config_path)
 
     for path in data_paths:
         assert os.path.isdir(path), 'Data path %s does not exist' % path
-        lss_config = read_yaml(lss_config_path)
-        dphys_cfg = DPhysConfig()
-        dphys_cfg.from_yaml(dphys_config_path)
+        if os.path.exists(os.path.join(path, 'visuals')):
+            print('Visuals already exist for %s' % path)
+            continue
+        print('Saving visuals for %s' % os.path.basename(path))
         ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
-        # explore_data(ds, sample_range='all', save=True)
-        explore_data(ds, sample_range='random', save=False)
+        explore_data(ds, sample_range='all', save=True)
+        # explore_data(ds, sample_range=np.random.choice(range(len(ds)), 5, replace=False), save=False)
 
 
 def main():

@@ -4,12 +4,7 @@
     <arg name="rviz" default="true"/>
     <arg name="record" default="false"/>
     <arg name="robot" default="husky"/>
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag"/> -->
-<!--    <arg name="bag" default="$(dirname)/../data/robingas/data/22-09-27-unhost/husky/husky_2022-09-27-15-01-44.bag"/> -->
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-06-30-cimicky_haj/husky_2022-06-30-15-58-37.bag"/> -->
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag"/> -->
-<!--     <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag"/> -->
-    <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag"/>
+    <arg name="bag" default="$(dirname)/../data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag"/>
     <arg name="params" default="$(eval bag.split()[0] + '.params')"/>
     <!-- Cloud preprocessing -->
     <arg name="filter_cloud" default="true"/>
@@ -39,7 +34,8 @@
         <arg unless="$(arg filter_cloud)" name="cloud" value="points"/>
         <arg if="$(arg filter_cloud)" name="cloud" value="points_filtered"/>
         <arg name="odom_frame" value="odom"/>
-        <arg name="lidar_beams" value="128"/>
+        <arg name="robot_frame" value="base_link"/>
+        <arg name="config" default="ctu"/>
     </include>
 
     <!-- RVIZ -->
