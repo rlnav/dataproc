@@ -14,3 +14,11 @@
     local-name: cloud_proc
     uri: https://github.com/ctu-vras/cloud_proc.git
     version: master
+- git:
+    local-name: cloud_proc
+    uri: https://github.com/norlab-ulaval/pointcloud_motion_deskew.git
+    version: melodic
+- git:
+    local-name: ouster-ros
+    uri: https://github.com/ouster-lidar/ouster-ros.git
+    version: master
