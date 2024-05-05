@@ -3,12 +3,14 @@
     <arg name="rviz" default="true"/>
     <arg name="record" default="false"/>
     <arg name="record_folder" default="$(dirname)"/>
+    <arg name="lidar" default="os0"/>
 
     <!-- Robot data: from bag file -->
     <include file="$(dirname)/os_replay.launch">
         <arg name="rviz" value="false"/>
         <arg name="range_filter" value="true"/>
         <arg name="deskewing" value="true"/>
+        <arg name="lidar" value="$(arg lidar)"/>
     </include>
 
     <!-- SLAM -->

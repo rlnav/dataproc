@@ -98,10 +98,13 @@ def visualize_point_cloud_map():
     paths = robingas_seq_paths['husky_oru']
 
     for path in paths:
+        if not os.path.exists(path):
+            print(f'Path {path} does not exist')
+            continue
         ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
         poses = ds.get_poses()
 
-        map_path = os.path.join(path, 'global_map.pcd')
+        map_path = os.path.join(path, 'global_cloud.pcd')
         assert os.path.exists(map_path)
         pcd = o3d.io.read_point_cloud(map_path)
         # pcd = o3d.geometry.PointCloud()

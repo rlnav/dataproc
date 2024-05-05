@@ -4,19 +4,10 @@
     <arg name="rviz" default="false"/>
     <arg name="range_filter" default="true"/>
     <arg name="deskewing" default="true"/>
+    <arg name="lidar" default="os0"/>
 
     <param name="use_sim_time" value="true"/>
-    <include file="$(find ouster_ros)/launch/replay.launch">
-            <arg name="ouster_ns" value="ouster"/>
-	    <arg name="sensor_frame" value="os_sensor"/>
-<!-- 	    <arg name="metadata" value="$(dirname)/../config/ouster/os1-122047000415-metadata.json"/> -->
-        <!-- bushes, forest -->
-<!-- 	    <arg name="metadata" value="$(dirname)/../config/ouster/os0-122140000627-metadata.json"/> -->
-<!--         <arg name="metadata" value="$(dirname)/../config/ouster/os1-991901000486-metadata.json"/> -->
-        <!-- skate park -->
-        <arg name="metadata" value="$(dirname)/../config/ouster/os1_64beam_radarize_metadata.json"/>
-	    <arg name="viz" value="false"/>
-    </include>
+    <include file="$(dirname)/$(arg lidar)_replay.launch"/>
 
     <!-- Point cloud range filter -->
     <node if="$(arg range_filter)" name="cloud_range_filter_max" pkg="nodelet" type="nodelet"
