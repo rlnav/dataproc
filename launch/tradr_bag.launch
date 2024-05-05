@@ -7,7 +7,7 @@
     <arg name="start" default="0." doc="Start moment in a bag file [sec]"/>
     <arg name="debayer" default="false" doc="Debayer images or not"/>
     <arg name="split_omni" default="true" doc="Split omni camera topic to separate images or not"/>
-    <arg name="record" default="false" doc="Record new bag file with image and deskewed point cloud topics or not"/>
+    <arg name="record" default="false" doc="Record new bag file with image and point cloud topics or not"/>
     <arg name="bag" default="$(dirname)/../data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag"/>
 <!--     <arg name="bag" default="$(dirname)/../data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag"/> -->
 
@@ -126,12 +126,6 @@
         </group>
     </group>
 
-     <!-- Point cloud deskewing -->
-    <node name="pcl_deskew_node" pkg="pointcloud_motion_deskew" type="pointcloud2_deskew_node" output="screen" >
-        <remap from="input_point_cloud" to="points" />
-        <remap from="output_point_cloud" to="points_deskewed" />
-	</node>
-
     <!-- Visualization -->
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
           args="-d $(dirname)/../config/rviz/tradr.rviz"/>
@@ -159,6 +153,6 @@
                 -O $(arg bag)_images.bag"/>
     <!-- Record new bag file with deskewed points topic -->
     <node if="$(arg record)" pkg="rosbag" type="record" name="rosbag_record_points"
-          args="/points_deskewed
+          args="/points
                 -O $(arg bag)_points.bag"/>
 </launch>
