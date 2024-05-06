@@ -30,6 +30,6 @@ do
     echo "Synchronizing from source path ${SOURCE_PATH}"
     echo "to target path $TARGET_PATH"
 
-    rsync -r --progress --ignore-existing --exclude='*.bag' ${SOURCE_PATH} ${TARGET_PATH}
+    rsync -r --progress --ignore-existing --exclude='*terrain*' --exclude='*.bag' ${SOURCE_PATH} ${TARGET_PATH}
 done
 echo "Done synchronizing data."

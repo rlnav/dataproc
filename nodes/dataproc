@@ -240,7 +240,7 @@ class DataProc:
         img_msgs = msgs[:n//2]
         info_msgs = msgs[n//2:-1]
         points_msg = msgs[-1]
-        assert isinstance(points_msg, PointCloud2)
+        assert isinstance(points_msg, PointCloud2), 'Last message must be PointCloud2'
 
         imgs, Ks, Es, points, stamp = self.get_sensor_data(img_msgs, info_msgs, points_msg)
         rospy.logdebug('imgs shape: %s' % str(imgs.shape))

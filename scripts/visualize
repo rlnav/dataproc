@@ -34,7 +34,6 @@ def save_visuals():
     dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
     lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
     data_paths = robingas_seq_paths[robot]
-    # data_paths = ['/media/ruslan/SSD/data/bags/ORU/2024_05_01_Husky_Ruslan_Viking_hills_dense/bags/radarize__2024-05-01-15-48-29_0/']
 
     lss_config = read_yaml(lss_config_path)
     dphys_cfg = DPhysConfig()
