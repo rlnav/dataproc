@@ -121,9 +121,8 @@ class DataProc:
         cloud = numpify(points_msg)
         if cloud.ndim > 1:
             cloud = cloud.reshape(-1,)
-        points = position(cloud)
 
-        return imgs, Ks, Es, points, stamp
+        return imgs, Ks, Es, cloud, stamp
 
     def get_map_pose(self, frame, stamp=None):
         if stamp is None:
@@ -181,7 +180,7 @@ class DataProc:
         plt.savefig(output_file)
         plt.close(fig)
 
-    def save_data(self, imgs, info_msgs, points, map_pose, stamp):
+    def save_data(self, imgs, info_msgs, cloud, map_pose, stamp):
         assert len(imgs) == len(info_msgs)
         assert imgs.shape[0] == len(self.img_topics)
         assert isinstance(map_pose, np.ndarray) and map_pose.shape == (4, 4)
@@ -191,9 +190,6 @@ class DataProc:
         poses_path = os.path.join(self.output_path, 'poses')
         poses_csv = os.path.join(poses_path, 'lidar_poses.csv')
         calib_path = os.path.join(self.output_path, 'calibration')
-
-        if not os.path.exists(poses_csv):
-            write_to_csv(poses_csv, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
 
         if not os.path.exists(calib_path):
             intrinsics_path = os.path.join(calib_path, 'cameras')
@@ -219,7 +215,6 @@ class DataProc:
             os.makedirs(p, exist_ok=True)
 
         # save point cloud
-        cloud = unstructured_to_structured(points, names=['x', 'y', 'z'])
         np.savez(os.path.join(cloud_path, id + '.npz'), cloud=cloud)
 
         # save images
@@ -227,6 +222,8 @@ class DataProc:
             cv2.imwrite(os.path.join(img_path, id + '_%s.png' % camera_names[i]), img)
 
         # save poses to csv
+        if not os.path.exists(poses_csv):
+            write_to_csv(poses_csv, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
         append_to_csv(poses_csv, '%.9f, %s\n' % (t, ', '.join(['%.3f' % x for x in map_pose[:3, :].flatten()])))
 
     def proc(self, *msgs):
@@ -242,20 +239,20 @@ class DataProc:
         points_msg = msgs[-1]
         assert isinstance(points_msg, PointCloud2), 'Last message must be PointCloud2'
 
-        imgs, Ks, Es, points, stamp = self.get_sensor_data(img_msgs, info_msgs, points_msg)
+        imgs, Ks, Es, cloud, stamp = self.get_sensor_data(img_msgs, info_msgs, points_msg)
         rospy.logdebug('imgs shape: %s' % str(imgs.shape))
         rospy.logdebug('Ks shape: %s' % str(Ks.shape))
         rospy.logdebug('Es shape: %s' % str(Es.shape))
-        rospy.logdebug('points shape: %s' % str(points.shape))
+        rospy.logdebug('cloud shape: %s' % str(cloud.shape))
 
-        # self.draw_points_in_images(imgs, Ks, Es, points)
+        # self.draw_points_in_images(imgs, Ks, Es, position(cloud))
         lidar_pose = self.get_map_pose(frame=self.lidar_frame, stamp=stamp)
 
         # save data
         if lidar_pose is None:
             return
         rospy.loginfo('Saving data sample to %s' % self.output_path)
-        self.save_data(imgs, info_msgs, points, lidar_pose, stamp)
+        self.save_data(imgs, info_msgs, cloud, lidar_pose, stamp)
 
     def spin(self):
         try:

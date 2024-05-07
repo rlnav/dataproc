@@ -47,10 +47,8 @@ def save_visuals():
         print('Saving visuals for %s' % os.path.basename(path))
         ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         explore_data(ds, sample_range='all', save=True)
-        # explore_data(ds, sample_range=np.random.choice(range(len(ds)), 5, replace=False), save=False)
 
-
-def main():
+def visualize():
     datasets = ['robingas']
     robots = ['husky_oru']
     for dataset in datasets:
@@ -59,7 +57,45 @@ def main():
             if dataset == 'rellis3d':
                 print('Rellis3D does not have multiple robots')
                 break
+
+
+def draw_poses():
+    from dataproc.vis import draw_coord_frames
+    from mayavi import mlab
+
+    robot = 'husky_oru'
+    dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
+    lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
+    data_paths = robingas_seq_paths[robot]
+
+    lss_config = read_yaml(lss_config_path)
+    dphys_cfg = DPhysConfig()
+    dphys_cfg.from_yaml(dphys_config_path)
+
+    for path in data_paths:
+        ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        poses = ds.poses
+        print('Poses shape:', poses.shape)
+
+        # plt.figure(figsize=(20, 10))
+        # plt.subplot(121)
+        # plt.plot(poses[:, 0, 3], poses[:, 1, 3], 'k.')
+        # plt.axis('equal')
+        #
+        # plt.subplot(122)
+        # plt.plot(poses[:, 2, 3], 'b')
+        # plt.show()
+
+        mlab.figure(size=(800, 800))
+        i = np.random.choice(range(len(poses)-50))
+        draw_coord_frames(poses[i:i+50:5], scale=0.5)
+        mlab.show()
+
+
+def main():
+    visualize()
     # save_visuals()
+    # draw_poses()
 
 
 if __name__ == '__main__':

@@ -50,9 +50,8 @@ def create_global_cloud_map():
     Create global heightmap cloud from the sequence of point clouds
     """
     dist_th = 0.1
-    # paths = robingas_seq_paths['husky']
-    # paths = robingas_seq_paths['husky_oru']
-    paths = robingas_seq_paths['tradr']
+    robot = 'husky_oru'
+    paths = robingas_seq_paths[robot]
 
     for path in paths:
         print('Processing sequence:', path)
@@ -67,7 +66,7 @@ def create_global_cloud_map():
             cloud = transform_cloud(cloud, T)
             points = position(cloud)
             points = filter_grid(points, ds.dphys_cfg.grid_res, keep='first', log=False)
-            if i == 0:
+            if global_cloud is None:
                 global_cloud = points
             else:
                 tree = cKDTree(global_cloud)
@@ -85,7 +84,7 @@ def create_global_cloud_map():
         pcd_poses.paint_uniform_color([1, 0, 0])
 
         # save global cloud
-        o3d.io.write_point_cloud(os.path.join(path, 'global_map.pcd'), pcd)
+        # o3d.io.write_point_cloud(os.path.join(path, 'map', 'map.pcd'), pcd)
         o3d.visualization.draw_geometries([pcd, pcd_poses])
 
 
