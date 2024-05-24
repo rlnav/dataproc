@@ -8,7 +8,7 @@ from dataproc.cloudproc import filter_grid
 from dataproc.imgproc import denormalize_img
 from dataproc.transformations import transform_cloud
 from dataproc.utils import read_yaml, position, normalize
-from dataproc.vis import draw_coord_frame, draw_coord_frames
+from dataproc.vis import draw_coord_frame, draw_coord_frames, set_axes_equal
 import open3d as o3d
 from scipy import interpolate
 from scipy.spatial.transform import Rotation
@@ -22,7 +22,6 @@ from monoforce.config import DPhysConfig
 from monoforce.models.dphysics_warp import TrackSimulator
 import warp as wp
 from time import time
-from dataproc.vis import set_axes_equal
 
 
 monoforce_path = '../../monoforce'
@@ -502,27 +501,29 @@ def warp_dphys():
         v_l = v - r * w
         return v_r, v_l
 
-    num_trajs = 40  # number of simulated trajectories (in parallel)
+    num_trajs = 100  # number of simulated trajectories (in parallel)
     dt = 0.001  # simulation timestep
-    T = int(6.0 / dt)  # number of simulation timesteps to perform
+    T = int(10.0 / dt)  # number of simulation timesteps to perform
     device = "cuda"
     grid_res = 0.1
 
-    hm_dir = os.path.join(robingas_seq_paths['husky_oru'][0], 'terrain/lidar/')
-    hm_path = os.path.join(hm_dir, np.random.choice(os.listdir(hm_dir)))
-    heightmap = load_heightmap(hm_path)
+    # hm_dir = os.path.join(robingas_seq_paths['husky_oru'][0], 'terrain/lidar/')
+    # hm_path = os.path.join(hm_dir, np.random.choice(os.listdir(hm_dir)))
+    # heightmap = load_heightmap(hm_path)
 
     # heightmap = np.zeros((128, 128))
     # heightmap[84:, :] = 0.2
 
-    # # gaussian heightmap
-    # x = np.linspace(-6.4, 6.4, 128)
-    # y = np.linspace(-6.4, 6.4, 128)
-    # X, Y = np.meshgrid(x, y)
-    # heightmap = 0.5 * np.exp(-1.0 * (X**2 + (Y-4)**2))
+    # gaussian heightmap
+    x = np.linspace(-6.4, 6.4, 128)
+    y = np.linspace(-6.4, 6.4, 128)
+    X, Y = np.meshgrid(x, y)
+    heightmap = (1.0 * np.exp(-1.0 * ((X-0)**2 + (Y-4)**2)) +
+                 4.0 * np.exp(-5.0 * ((X-1)**2 + (Y+2)**2)) +
+                 2.0 * np.exp(-3.0 * ((X+2)**2 + (Y+4)**2))
+                 ) / 3.0
 
     np_heightmaps = [heightmap for _ in range(num_trajs)]
-    np_kfs = [0.5 * np.ones(heightmap.shape, dtype=np.float32) for _ in range(num_trajs)]
     res = [grid_res for _ in range(num_trajs)]
 
     init_poses = np.zeros((num_trajs, 7))
@@ -530,18 +531,19 @@ def warp_dphys():
     init_poses[:, 6] = 1.0  # quaternion w
 
     assert num_trajs % 2 == 0, 'num_trajs must be even'
-    vel_max, omega_max = 1.0, 1.0
+    vel_max, omega_max = 0.5, 0.5
     vels = np.concatenate([-vel_max * np.ones((num_trajs // 2, T)), vel_max * np.ones((num_trajs // 2, T))])
     omegas = np.concatenate([np.linspace(-omega_max, omega_max, num_trajs // 2),
                              np.linspace(-omega_max, omega_max, num_trajs // 2)])
 
     track_vels = np.zeros((num_trajs, T, 2))
-    for r in range(num_trajs):
-        track_vels[r, :, 0], track_vels[r, :, 1] = vw_to_track_vel(vels[r], omegas[r])
+    for i in range(num_trajs):
+        track_vels[i, :, 0], track_vels[i, :, 1] = vw_to_track_vel(vels[i], omegas[i])
     flipper_angles = np.zeros((num_trajs, T, 4))
     # flipper_angles[0, :, 0] = 0.5
 
-    simulator = TrackSimulator(np_heightmaps, np_kfs, res, T, use_renderer=False, device=device)
+    simulator = TrackSimulator(np_heightmaps, res, T,
+                               use_renderer=False, device=device)
 
     simulator.set_control(track_vels, flipper_angles)
     simulator.set_init_poses(init_poses)
@@ -557,18 +559,16 @@ def warp_dphys():
     assert forces_np.shape == (T, num_trajs, 6)
 
     # path with the smallest cost
-    costs = np.linalg.norm(forces_np[..., :3], axis=-1).sum(axis=0)
-    path_lengths = np.sum(np.linalg.norm(np.diff(body_q_np[:, :, :3], axis=0), axis=2), axis=0)
+    # costs = np.linalg.norm(forces_np[..., :3], axis=-1).sum(axis=0)
+    costs = np.linalg.norm(forces_np[..., :3], axis=-1).sum(axis=0) + np.linalg.norm(forces_np[..., :3], axis=-1).std(axis=0)
+    path_lengths = np.sum(np.linalg.norm(np.diff(body_q_np[..., :3], axis=0), axis=2), axis=0)
     assert costs.shape == (num_trajs,)
     assert path_lengths.shape == (num_trajs,)
-    unfeasible_paths = np.where(path_lengths > 100.0)[0]
-    print('unfeasible paths: ', unfeasible_paths)
-    costs = np.delete(costs, unfeasible_paths)
-    if len(costs) == 0:
+    unfeasible_path_ids = np.where(path_lengths > 10.0)[0]
+    print('unfeasible path ids: ', unfeasible_path_ids)
+    if len(unfeasible_path_ids) == num_trajs:
         print('All paths are unfeasible')
         exit(0)
-    body_q_np = np.delete(body_q_np, unfeasible_paths, axis=1)
-    forces_np = np.delete(forces_np, unfeasible_paths, axis=1)
     best_robot = np.argmin(costs)
     num_trajs = body_q_np.shape[1]
 
@@ -579,10 +579,24 @@ def warp_dphys():
     X = np.linspace(-hm_w / 2. * grid_res, hm_w / 2. * grid_res, hm_w)
     Y = np.linspace(-hm_h / 2. * grid_res, hm_h / 2. * grid_res, hm_h)
     X, Y = np.meshgrid(X, Y)
-    ax.plot_surface(X, Y, heightmap.T, cmap='jet', alpha=0.6)
+    ax.plot_surface(X, Y, heightmap.T, cmap='jet', alpha=0.4)
     set_axes_equal(ax)
-    for r in range(num_trajs):
-        ax.plot(body_q_np[:, r, 0], body_q_np[:, r, 1], body_q_np[:, r, 2], 'g-' if r == best_robot else 'k--')
+    costs_norm = np.sqrt(normalize(costs))
+    colors = np.zeros((num_trajs, 3))
+    colors[:, 1] = 1 - costs_norm
+    colors[:, 0] = costs_norm
+    for i in range(num_trajs):
+        if i in unfeasible_path_ids:
+            marker = '--'
+            linewidth = 1
+        elif i == best_robot:
+            marker = '-'
+            linewidth = 4
+        else:
+            marker = '-'
+            linewidth = 1
+        ax.plot(body_q_np[:, i, 0], body_q_np[:, i, 1], body_q_np[:, i, 2], marker,
+                linewidth=linewidth, color=colors[i])
     plt.show()
 
 

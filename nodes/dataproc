@@ -5,11 +5,9 @@ from threading import RLock
 import cv2
 import numpy as np
 import torch
-from numpy.lib.recfunctions import unstructured_to_structured
 import rospy
 from cv_bridge import CvBridge
 from dataproc.io import append_to_csv, write_to_csv
-from dataproc.utils import position
 from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
 from dataproc.transformations import transform_cloud
 from dataproc.ros import write_intrinsics_to_yaml, append_tf_to_yaml
