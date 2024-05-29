@@ -600,6 +600,49 @@ def warp_dphys():
     plt.show()
 
 
+def depth_range_image():
+    from monoforce.cloudproc import points2range_img
+    from monoforce.datasets import RobinGasDepth
+
+    path = robingas_seq_paths[robot][1]
+
+    ds = RobinGasDepth(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    i = np.random.choice(range(len(ds)))
+
+    # pcd = o3d.geometry.PointCloud()
+    # pcd.points = o3d.utility.Vector3dVector(points)
+    # o3d.visualization.draw_geometries([pcd])
+    rgb, K = ds.get_image(i)
+    rgb = np.asarray(rgb)
+
+    depth, points_uv = ds.get_depth_image(i, points_source='radar')
+
+    # cloud = ds.get_raw_radar_cloud(i)
+    # points = position(cloud)
+    # range_img = points2range_img(x=points[:, 2], y=-points[:, 0], z=-points[:, 1], H=H, W=W)
+    # print('Range image shape:', range_img.shape)
+
+    rgbd = ds[i][0].squeeze()
+    rgb = denormalize_img(rgbd[:3])
+    depth = rgbd[3]
+
+    plt.figure(figsize=(20, 10))
+    plt.subplot(1, 2, 1)
+    plt.title('Camera Image with Points')
+    # dist = depth[points_uv[:, 1].astype(int), points_uv[:, 0].astype(int)]
+    # plt.scatter(points_uv[:, 0], points_uv[:, 1], s=4, c=dist, cmap='jet', alpha=1)
+    plt.imshow(rgb)
+
+    plt.subplot(1, 2, 2)
+    plt.title('Depth Image')
+    plt.imshow(depth, cmap='jet', vmin=0, vmax=1)
+
+    # plt.subplot(1, 3, 3)
+    # plt.title('Range Image')
+    # plt.imshow(range_img, cmap='jet', origin='lower', vmin=0, vmax=1)
+    plt.show()
+
+
 def main():
     # data_slicing()
     # visualize_point_cloud_map()
@@ -614,7 +657,8 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
-    warp_dphys()
+    # warp_dphys()
+    depth_range_image()
 
 
 if __name__ == '__main__':

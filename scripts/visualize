@@ -1,7 +1,7 @@
 import os
 import numpy as np
 from monoforce.config import DPhysConfig
-from monoforce.datasets import robingas_seq_paths, RobinGasVis, rellis3d_seq_paths, Rellis3DVis
+from monoforce.datasets import robingas_seq_paths, RobinGasPoints, rellis3d_seq_paths, Rellis3DPoints
 from monoforce.datasets.utils import explore_data
 from monoforce.utils import read_yaml
 
@@ -12,10 +12,10 @@ def vis_data(dataset, robot='husky'):
 
     if dataset == 'robingas':
         data_paths = robingas_seq_paths[robot]
-        DataClass = RobinGasVis
+        DataClass = RobinGasPoints
     elif dataset == 'rellis3d':
         data_paths = rellis3d_seq_paths
-        DataClass = Rellis3DVis
+        DataClass = Rellis3DPoints
     else:
         raise ValueError('Invalid dataset %s. Supported: rellis3d and robingas' % dataset)
 
@@ -45,11 +45,12 @@ def save_visuals():
             print('Visuals already exist for %s' % path)
             continue
         print('Saving visuals for %s' % os.path.basename(path))
-        ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = RobinGasPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         explore_data(ds, sample_range='all', save=True)
 
 def visualize():
     datasets = ['robingas']
+    # robots = ['tradr', 'husky', 'husky_oru']
     robots = ['husky_oru']
     for dataset in datasets:
         for robot in robots:
@@ -73,7 +74,7 @@ def draw_poses():
     dphys_cfg.from_yaml(dphys_config_path)
 
     for path in data_paths:
-        ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = RobinGasPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         poses = ds.poses
         print('Poses shape:', poses.shape)
 

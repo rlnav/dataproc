@@ -24,7 +24,8 @@ class DataProc:
     def __init__(self,
                  img_topics=[],
                  camera_info_topics=[],
-                 points_topic='/points',
+                 lidar_topic='/points',
+                 radar_topic='/hugin_raf_1/radar_data',
                  robot_frame='base_link',
                  map_frame='map',
                  max_msgs_delay=0.5,
@@ -34,10 +35,12 @@ class DataProc:
         self.map_frame = map_frame
         self.robot_frame = robot_frame
         self.lidar_frame = None
+        self.radar_frame = None
         self.camera_frames = []
         self.img_topics = np.sort(img_topics).tolist()
         self.camera_info_topics = np.sort(camera_info_topics).tolist()
-        self.points_topic = points_topic
+        self.lidar_topic = lidar_topic
+        self.radar_topic = radar_topic
         self.cv_bridge = CvBridge()
         self.tf_buffer = tf2_ros.Buffer()
         self.tf_listener = tf2_ros.TransformListener(self.tf_buffer)
@@ -57,8 +60,10 @@ class DataProc:
         for topic in self.camera_info_topics:
             rospy.loginfo('Subscribing to %s' % topic)
             self.subs.append(Subscriber(topic, CameraInfo))
-        rospy.loginfo('Subscribing to %s' % self.points_topic)
-        self.subs.append(Subscriber(self.points_topic, PointCloud2))
+        rospy.loginfo('Subscribing to %s' % self.lidar_topic)
+        self.subs.append(Subscriber(self.lidar_topic, PointCloud2))
+        rospy.loginfo('Subscribing to %s' % self.radar_topic)
+        self.subs.append(Subscriber(self.radar_topic, PointCloud2))
         self.sync = ApproximateTimeSynchronizer(self.subs, queue_size=1, slop=self.max_msgs_delay)
         self.sync.registerCallback(self.callback)
 
@@ -87,14 +92,15 @@ class DataProc:
 
         return E, K, D
 
-    def get_sensor_data(self, img_msgs, info_msgs, points_msg):
+    def get_sensor_data(self, img_msgs, info_msgs, lidar_msg, radar_msg):
         """
         Get inputs for LSS model from image and camera info messages.
         """
         assert len(img_msgs) == len(info_msgs)
         assert isinstance(img_msgs[0], CompressedImage)
         assert isinstance(info_msgs[0], CameraInfo)
-        assert isinstance(points_msg, PointCloud2)
+        assert isinstance(lidar_msg, PointCloud2)
+        assert isinstance(radar_msg, PointCloud2)
         imgs = []
         Ks = []
         Es = []
@@ -115,12 +121,18 @@ class DataProc:
         Es = np.stack(Es)
 
         if self.lidar_frame is None:
-            self.lidar_frame = points_msg.header.frame_id
-        cloud = numpify(points_msg)
-        if cloud.ndim > 1:
-            cloud = cloud.reshape(-1,)
+            self.lidar_frame = lidar_msg.header.frame_id
+        lidar_cloud = numpify(lidar_msg)
+        if lidar_cloud.ndim > 1:
+            lidar_cloud = lidar_cloud.reshape(-1,)
 
-        return imgs, Ks, Es, cloud, stamp
+        if self.radar_frame is None:
+            self.radar_frame = radar_msg.header.frame_id
+        radar_cloud = numpify(radar_msg)
+        if radar_cloud.ndim > 1:
+            radar_cloud = radar_cloud.reshape(-1,)
+
+        return imgs, Ks, Es, lidar_cloud, radar_cloud, stamp
 
     def get_map_pose(self, frame, stamp=None):
         if stamp is None:
@@ -178,12 +190,13 @@ class DataProc:
         plt.savefig(output_file)
         plt.close(fig)
 
-    def save_data(self, imgs, info_msgs, cloud, map_pose, stamp):
+    def save_data(self, imgs, info_msgs, lidar_cloud, map_pose, radar_cloud, stamp):
         assert len(imgs) == len(info_msgs)
         assert imgs.shape[0] == len(self.img_topics)
         assert isinstance(map_pose, np.ndarray) and map_pose.shape == (4, 4)
 
         cloud_path = os.path.join(self.output_path, 'clouds')
+        radar_cloud_path = os.path.join(self.output_path, 'radar_clouds')
         img_path = os.path.join(self.output_path, 'images')
         poses_path = os.path.join(self.output_path, 'poses')
         poses_csv = os.path.join(poses_path, 'lidar_poses.csv')
@@ -201,6 +214,10 @@ class DataProc:
             append_tf_to_yaml(tf_path, self.robot_frame, self.lidar_frame, tf_buffer=self.tf_buffer, stamp=stamp,
                               matrix_name=f'T_{self.robot_frame}__os_sensor')
 
+            assert self.radar_frame is not None
+            append_tf_to_yaml(tf_path, self.robot_frame, self.radar_frame, tf_buffer=self.tf_buffer, stamp=stamp,
+                              matrix_name=f'T_{self.robot_frame}__hugin_radar')
+
             assert len(self.camera_frames) == len(self.img_topics)
             for i, camera_frame in enumerate(self.camera_frames):
                 append_tf_to_yaml(tf_path, self.robot_frame, camera_frame, tf_buffer=self.tf_buffer, stamp=stamp,
@@ -209,11 +226,14 @@ class DataProc:
         t = stamp.to_sec()
         id = str('%.9f' % t).replace('.', '_')
         camera_names = [c.split('/')[1] for c in self.img_topics]
-        for p in [cloud_path, img_path, poses_path, calib_path]:
+        for p in [cloud_path, radar_cloud_path, img_path, poses_path, calib_path]:
             os.makedirs(p, exist_ok=True)
 
-        # save point cloud
-        np.savez(os.path.join(cloud_path, id + '.npz'), cloud=cloud)
+        # save lidar point cloud
+        np.savez(os.path.join(cloud_path, id + '.npz'), cloud=lidar_cloud)
+
+        # save radar point cloud
+        np.savez(os.path.join(radar_cloud_path, id + '.npz'), cloud=radar_cloud)
 
         # save images
         for i, img in enumerate(imgs):
@@ -226,31 +246,35 @@ class DataProc:
 
     def proc(self, *msgs):
         n = len(msgs)
-        assert n % 2 == 1, 'Number of messages must be odd'
-        for i in range((n-1)//2):
-            assert isinstance(msgs[i], CompressedImage), 'First %d messages must be CompressedImage' % (n//2)
-            assert isinstance(msgs[i+n//2], CameraInfo), 'Last %d messages must be CameraInfo' % (n//2)
-            assert msgs[i].header.frame_id == msgs[i+n//2].header.frame_id, \
-                'Image and CameraInfo messages must have the same frame_id'
-        img_msgs = msgs[:n//2]
-        info_msgs = msgs[n//2:-1]
-        points_msg = msgs[-1]
-        assert isinstance(points_msg, PointCloud2), 'Last message must be PointCloud2'
+        assert n % 2 == 0, 'Number of messages must be even'
+        assert n >= 4, 'At least 4 messages are required: 2 images, 2 camera infos, 1 lidar, 1 radar'
+        n_cams = (n - 2) // 2
+        for i in range(n_cams):
+            assert isinstance(msgs[i], CompressedImage), 'First %d messages must be CompressedImage' % n_cams
+        for i in range(n_cams, 2*n_cams):
+            assert isinstance(msgs[i], CameraInfo), 'Next %d messages must be CameraInfo' % n_cams
+        img_msgs = msgs[:n_cams]
+        info_msgs = msgs[n_cams : 2*n_cams]
+        lidar_msg = msgs[-2]
+        assert isinstance(lidar_msg, PointCloud2), 'Second to last message must be PointCloud2'
+        radar_msg = msgs[-1]
+        assert isinstance(radar_msg, PointCloud2), 'Last message must be PointCloud2'
 
-        imgs, Ks, Es, cloud, stamp = self.get_sensor_data(img_msgs, info_msgs, points_msg)
+        imgs, Ks, Es, lidar_cloud, radar_cloud, stamp = self.get_sensor_data(img_msgs, info_msgs, lidar_msg, radar_msg)
         rospy.logdebug('imgs shape: %s' % str(imgs.shape))
         rospy.logdebug('Ks shape: %s' % str(Ks.shape))
         rospy.logdebug('Es shape: %s' % str(Es.shape))
-        rospy.logdebug('cloud shape: %s' % str(cloud.shape))
+        rospy.logdebug('lidar cloud shape: %s' % str(lidar_cloud.shape))
+        rospy.logdebug('radar cloud shape: %s' % str(radar_cloud.shape))
 
-        # self.draw_points_in_images(imgs, Ks, Es, position(cloud))
+        # self.draw_points_in_images(imgs, Ks, Es, position(lidar_cloud))
         lidar_pose = self.get_map_pose(frame=self.lidar_frame, stamp=stamp)
 
         # save data
         if lidar_pose is None:
             return
         rospy.loginfo('Saving data sample to %s' % self.output_path)
-        self.save_data(imgs, info_msgs, cloud, lidar_pose, stamp)
+        self.save_data(imgs, info_msgs, lidar_cloud, lidar_pose, radar_cloud, stamp)
 
     def spin(self):
         try:
@@ -264,14 +288,16 @@ def main():
 
     img_topics = rospy.get_param('~img_topics', [])
     camera_info_topics = rospy.get_param('~camera_info_topics', [])
-    points_topic = rospy.get_param('~points_topic', '/points')
+    lidar_topic = rospy.get_param('~lidar_topic', '/points')
+    radar_topic = rospy.get_param('~radar_topic', '/hugin_raf_1/radar_data')
     robot_frame = rospy.get_param('~robot_frame', 'base_link')
     max_msgs_delay = rospy.get_param('~max_msgs_delay', 0.1)
     bag_path = rospy.get_param('~bag_path', '')
     output_path = bag_path.split()[0].replace('.bag', '')
     save_time_period = rospy.get_param('~save_time_period', 1.0)
 
-    node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics, points_topic=points_topic,
+    node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics,
+                    lidar_topic=lidar_topic, radar_topic=radar_topic,
                     robot_frame=robot_frame, max_msgs_delay=max_msgs_delay,
                     output_path=output_path, save_time_period=save_time_period)
     node.start()
