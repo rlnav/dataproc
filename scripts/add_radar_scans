@@ -1,0 +1,78 @@
+#!/usr/bin/env python
+
+import os
+from ros_numpy import numpify
+from rosbag import Bag
+from tqdm import tqdm
+import numpy as np
+import rospy
+from sensor_msgs.msg import PointCloud2
+from dataproc.ros import slots
+from monoforce.datasets import robingas_seq_paths
+
+
+def fname2stamp(fname):
+    secs, nsec = fname.split('.')[0].split('_')
+    assert len(secs) == 10
+    assert len(nsec) == 9
+    stamp = int(secs) + int(nsec) * 1e-9
+    return stamp
+
+
+def process_bag(bag_path, fnames, radar_topic, radar_clouds_path, time_window, max_age):
+    stamps = [fname2stamp(f) for f in fnames]
+    n_saved_files = 0
+    with Bag(bag_path) as bag:
+        for i, stamp in tqdm(enumerate(stamps)):
+            tl = rospy.Time.from_sec(stamp - time_window/2.)
+            tr = rospy.Time.from_sec(stamp + time_window/2.)
+            radar_cloud_path = os.path.join(radar_clouds_path, fnames[i])
+            if os.path.exists(radar_cloud_path):
+                continue
+            for topic, msg, t in bag.read_messages(start_time=tl, end_time=tr, topics=[radar_topic]):
+                dt = abs(t.to_sec() - stamp)
+                if dt < max_age:
+                    # print('Found radar scan at', t.to_sec(), 'in bag file', os.path.basename(bag_path))
+                    msg = PointCloud2(*slots(msg))
+                    radar_cloud = numpify(msg)
+
+                    # save radar point cloud
+                    np.savez(radar_cloud_path, cloud=radar_cloud)
+                    n_saved_files += 1
+        bag.close()
+
+
+def main():
+    paths = [
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/01_loop_flat/bags/',
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/02_bumpy_loop/bags/',
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/03_bmx_loop/bags/',
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/04_bmx_loop_no_navtech/bags/',
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/05_bumps_loop_no_navtech/bags/',
+        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/06_flat_loop_no_navtech/bags/',
+        '/media/ruslan/data/bags/ORU/2024_02_07_Husky_campus_forest_bushes/bags/',
+        '/media/ruslan/data/bags/ORU/2024_04_27_Husky_Ruslan_second_longer_campus/bags/',
+        # '/media/ruslan/data/bags/ORU/2024_05_01_Husky_Ruslan_Viking_hills_dense/bags/',
+        '/media/ruslan/data/bags/ORU/2024_05_24_Husky_Viking_hills_high_grass/bags/',
+    ]
+    for path_i, path in enumerate(paths):
+        assert os.path.exists(path)
+        bag_paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.bag')]
+        lidar_clouds_path = os.path.join(robingas_seq_paths['husky_oru'][path_i], 'clouds/')
+        radar_clouds_path = lidar_clouds_path.replace('/clouds', '/radar_clouds')
+        os.makedirs(radar_clouds_path, exist_ok=True)
+
+        fnames = os.listdir(lidar_clouds_path)
+        radar_topic = '/hugin_raf_1/radar_data'
+        for bag_path in bag_paths:
+            # print('Processing', bag_path)
+            process_bag(bag_path, fnames, radar_topic, radar_clouds_path, time_window=0.2, max_age=0.03)
+
+        n_lidar_files = len(fnames)
+        n_radar_files = len(os.listdir(radar_clouds_path))
+        print(f'Saved {n_radar_files} radar scans out of {n_lidar_files} lidar scans for {os.path.basename(path)}')
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()
