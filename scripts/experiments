@@ -19,7 +19,7 @@ from monoforce.datasets import RobinGas, Rellis3D
 from monoforce.datasets.robingas import robingas_seq_paths
 from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
-from monoforce.models.dphysics_warp import TrackSimulator
+from monoforce.models.dphysics_warp import DiffSim
 from monoforce.models.lss.model import compile_model
 import warp as wp
 from time import time
@@ -543,15 +543,15 @@ def warp_dphys():
     flipper_angles = np.zeros((num_trajs, T, 4))
     # flipper_angles[0, :, 0] = 0.5
 
-    simulator = TrackSimulator(np_heightmaps, res, T,
-                               use_renderer=False, device=device)
-
+    simulator = DiffSim(np_heightmaps, res, T, use_renderer=False, device=device)
     simulator.set_control(track_vels, flipper_angles)
     simulator.set_init_poses(init_poses)
 
     start = time()
+    # simulator.update_heightmaps(np_heightmaps)
     body_q = simulator.simulate(render=False, use_graph=True)
     print('simulation took ', time() - start, ' s')
+
     body_q_np = body_q.numpy()
     forces_np = simulator.body_f.numpy()
     print('body_q: ', body_q_np.shape)
@@ -661,8 +661,8 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
-    # warp_dphys()
-    depth_range_image()
+    warp_dphys()
+    # depth_range_image()
 
 
 if __name__ == '__main__':
