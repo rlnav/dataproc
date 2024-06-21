@@ -24,7 +24,7 @@ def vis_data(dataset, robot='husky'):
         lss_config = read_yaml(lss_config_path)
         dphys_cfg = DPhysConfig()
         dphys_cfg.from_yaml(dphys_config_path)
-        ds = DataClass(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         ds = ds[np.random.choice(len(ds), 32, replace=False)]
         explore_data(ds, sample_range='random', save=False)
 

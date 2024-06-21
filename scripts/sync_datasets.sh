@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # This script synchronizes data DATASETS from a remote server
-DATA_PATH=/media/ruslan/data
-#DATA_PATH=/media/ruslan/SSD/data
+#DATA_PATH=/media/ruslan/data
+DATA_PATH=/media/ruslan/SSD/data
 
 # list of DATASETS to process
 DATASETS=(
@@ -24,12 +24,12 @@ do
 
     # if target path does not exist, create it
     if [ ! -d "$TARGET_PATH" ]; then
-        mkdir -p $TARGET_PATH
+        mkdir -p "$TARGET_PATH"
     fi
 
     echo "Synchronizing from source path ${SOURCE_PATH}"
     echo "to target path $TARGET_PATH"
 
-    rsync -r --progress --ignore-existing --exclude='*terrain*' --exclude='*.bag' ${SOURCE_PATH} ${TARGET_PATH}
+    rsync -r --progress --delete --ignore-existing --exclude="*visuals*" --exclude="*.mp4" --exclude='*terrain*' --exclude='*.bag' ${SOURCE_PATH} ${TARGET_PATH}
 done
 echo "Done synchronizing data."

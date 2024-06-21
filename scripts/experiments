@@ -4,7 +4,7 @@ import torch
 import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
-from dataproc.cloudproc import filter_grid
+from dataproc.cloudproc import filter_grid, hm_to_cloud
 from dataproc.imgproc import denormalize_img
 from dataproc.transformations import transform_cloud
 from dataproc.utils import read_yaml, position, normalize
@@ -510,26 +510,23 @@ def warp_dphys():
 
     # hm_dir = os.path.join(robingas_seq_paths['husky_oru'][0], 'terrain/lidar/')
     # hm_path = os.path.join(hm_dir, np.random.choice(os.listdir(hm_dir)))
-    # heightmap = load_heightmap(hm_path)
+    # hm = load_heightmap(hm_path)
 
-    # heightmap = np.zeros((128, 128))
-    # heightmap[84:, :] = 0.2
+    # step hm
+    hm = np.zeros((128, 128))
+    hm[84:, :] = 0.2
 
-    # gaussian heightmap
-    x = np.linspace(-6.4, 6.4, 128)
-    y = np.linspace(-6.4, 6.4, 128)
-    X, Y = np.meshgrid(x, y)
-    heightmap = (1.0 * np.exp(-1.0 * ((X-0)**2 + (Y-4)**2)) +
-                 4.0 * np.exp(-5.0 * ((X-1)**2 + (Y+2)**2)) +
-                 2.0 * np.exp(-3.0 * ((X+2)**2 + (Y+4)**2))
-                 ) / 3.0
+    # # gaussian hm
+    # x = np.linspace(-6.4, 6.4, 128)
+    # y = np.linspace(-6.4, 6.4, 128)
+    # X, Y = np.meshgrid(x, y)
+    # hm = (1.0 * np.exp(-1.0 * ((X-0)**2 + (Y-4)**2)) +
+    #              4.0 * np.exp(-5.0 * ((X-1)**2 + (Y+2)**2)) +
+    #              2.0 * np.exp(-3.0 * ((X+2)**2 + (Y+4)**2))
+    #              ) / 3.0
 
-    np_heightmaps = [heightmap for _ in range(num_trajs)]
+    np_hms = [hm for _ in range(num_trajs)]
     res = [grid_res for _ in range(num_trajs)]
-
-    init_poses = np.zeros((num_trajs, 7))
-    init_poses[:, 2] = 0.2  # robot's initial z coordinate
-    init_poses[:, 6] = 1.0  # quaternion w
 
     assert num_trajs % 2 == 0, 'num_trajs must be even'
     vel_max, omega_max = 0.5, 0.5
@@ -543,15 +540,12 @@ def warp_dphys():
     flipper_angles = np.zeros((num_trajs, T, 4))
     # flipper_angles[0, :, 0] = 0.5
 
-    simulator = DiffSim(np_heightmaps, res, T, use_renderer=False, device=device)
+    simulator = DiffSim(np_hms, res, T, use_renderer=False, device=device)
     simulator.set_control(track_vels, flipper_angles)
-    simulator.set_init_poses(init_poses)
 
     start = time()
-    # simulator.update_heightmaps(np_heightmaps)
     body_q = simulator.simulate(render=False, use_graph=True)
     print('simulation took ', time() - start, ' s')
-
     body_q_np = body_q.numpy()
     forces_np = simulator.body_f.numpy()
     print('body_q: ', body_q_np.shape)
@@ -576,11 +570,11 @@ def warp_dphys():
     # show height map as a surface and best trajectory in 3D
     fig = plt.figure(figsize=(10, 10))
     ax = fig.add_subplot(111, projection='3d')
-    hm_w, hm_h = heightmap.shape
+    hm_w, hm_h = hm.shape
     X = np.linspace(-hm_w / 2. * grid_res, hm_w / 2. * grid_res, hm_w)
     Y = np.linspace(-hm_h / 2. * grid_res, hm_h / 2. * grid_res, hm_h)
     X, Y = np.meshgrid(X, Y)
-    ax.plot_surface(X, Y, heightmap.T, cmap='jet', alpha=0.4)
+    ax.plot_surface(X, Y, hm.T, cmap='jet', alpha=0.4)
     set_axes_equal(ax)
     costs_norm = np.sqrt(normalize(costs))
     colors = np.zeros((num_trajs, 3))
@@ -602,40 +596,36 @@ def warp_dphys():
 
 
 def depth_range_image():
-    from monoforce.cloudproc import points2range_img
     from monoforce.datasets import RobinGasRGBD
 
-    path = np.random.choice(robingas_seq_paths[robot])
+    robot = 'husky_oru'
+    paths = robingas_seq_paths[robot][:6] + [robingas_seq_paths[robot][-3]] + [robingas_seq_paths[robot][-1]]
+    for path in paths[-1:]:
+        ds = RobinGasRGBD(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+        i = np.random.choice(range(len(ds)))
 
-    ds = RobinGasRGBD(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
-    i = np.random.choice(range(len(ds)))
+        rgb, K = ds.get_image(i)
+        rgb = np.asarray(rgb)
 
-    rgb, K = ds.get_image(i)
-    rgb = np.asarray(rgb)
+        depth, points_uv = ds.get_depth_image(i, points_source='radar')
 
-    depth, points_uv = ds.get_depth_image(i, points_source='radar')
+        plt.figure(figsize=(20, 10))
+        plt.subplot(1, 2, 1)
+        plt.title('Camera Image with Points')
+        dist = depth[points_uv[:, 1].astype(int), points_uv[:, 0].astype(int)]
+        plt.scatter(points_uv[:, 0], points_uv[:, 1], s=4, c=dist, cmap='jet', alpha=1)
+        plt.imshow(rgb)
 
-    # rgbd = ds[i][0].squeeze()
-    # rgb = denormalize_img(rgbd[:3])
-    # depth = rgbd[3]
+        plt.subplot(1, 2, 2)
+        plt.title('Depth Image')
+        plt.imshow(depth, cmap='jet', vmin=0, vmax=1)
 
-    plt.figure(figsize=(20, 10))
-    plt.subplot(1, 2, 1)
-    plt.title('Camera Image with Points')
-    dist = depth[points_uv[:, 1].astype(int), points_uv[:, 0].astype(int)]
-    plt.scatter(points_uv[:, 0], points_uv[:, 1], s=4, c=dist, cmap='jet', alpha=1)
-    plt.imshow(rgb)
+        plt.show()
 
-    plt.subplot(1, 2, 2)
-    plt.title('Depth Image')
-    plt.imshow(depth, cmap='jet', vmin=0, vmax=1)
-
-    plt.show()
-
-    points = position(ds.get_cloud(i, points_source='radar'))
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-    o3d.visualization.draw_geometries([pcd])
+        points = position(ds.get_cloud(i, points_source='radar'))
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        o3d.visualization.draw_geometries([pcd])
 
     # rgbd, rot, tran, intrins, post_rots, post_trans, hm_geom, hm_terrain = ds[i]
     # inputs = rgbd, rot, tran, intrins, post_rots, post_trans
@@ -645,6 +635,72 @@ def depth_range_image():
     #
     # outputs = model(*inputs)
     # print(outputs.shape)
+
+
+def merge_heightmaps():
+    from scipy.spatial import cKDTree
+
+    ds = RobinGas(path=robingas_seq_paths['husky_oru'][-1], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+
+    n_frames = 10
+    i = np.random.choice(range(len(ds)-n_frames))
+    merged_hm_points = None
+    global_hm_cloud = []
+    for i in tqdm(range(i, i+n_frames, 1)):
+        hm = ds.get_geom_height_map(i)
+        pose = ds.get_pose(i)
+        hm_points = hm_to_cloud(hm[0], ds.dphys_cfg.d_max, mask=hm[1]).cpu().numpy()
+        hm_points = transform_cloud(hm_points, pose)
+        print('New heightmap points shape:', hm_points.shape)
+
+        if merged_hm_points is None:
+            merged_hm_points = hm_points
+        else:
+            merged_hm_xy = merged_hm_points[:, :2]
+            hm_xy = hm_points[:, :2]
+            tree = cKDTree(merged_hm_xy)
+            dists, idxs = tree.query(hm_xy, k=1)
+            common_points_mask = np.asarray(dists <= ds.dphys_cfg.grid_res)
+            print('Common points ratio:', common_points_mask.mean())
+            common_points = hm_points[common_points_mask]
+
+            X, Y = hm_xy[:, 0], hm_xy[:, 1]
+            Z = hm_points[:, 2]
+            Z[common_points_mask] = (Z[common_points_mask] + merged_hm_points[idxs[common_points_mask], 2]) / 2
+            merged_hm_points = np.column_stack((X, Y, Z))
+            print('Merged heightmap points shape:', merged_hm_points.shape)
+
+        global_hm_cloud.append(hm_points)
+    global_hm_cloud = np.concatenate(global_hm_cloud, axis=0)
+
+    # plot global cloud with open3d
+    hm_pcd = o3d.geometry.PointCloud()
+    hm_pcd.points = o3d.utility.Vector3dVector(global_hm_cloud)
+    hm_pcd.paint_uniform_color([0, 1, 0])
+
+    common_hm_pcd = o3d.geometry.PointCloud()
+    common_hm_pcd.points = o3d.utility.Vector3dVector(common_points)
+    common_hm_pcd.paint_uniform_color([0, 0, 1])
+
+    o3d.visualization.draw_geometries([hm_pcd, common_hm_pcd])
+
+
+def radar_lidar_clouds():
+    ds = RobinGas(path=robingas_seq_paths['husky_oru'][-2], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+
+    i = 100
+    lidar_cloud = ds.get_cloud(i, points_source='lidar')
+    radar_cloud = ds.get_cloud(i, points_source='radar')
+
+    lidar_pcd = o3d.geometry.PointCloud()
+    lidar_pcd.points = o3d.utility.Vector3dVector(position(lidar_cloud))
+    lidar_pcd.paint_uniform_color([1, 0, 0])
+
+    radar_pcd = o3d.geometry.PointCloud()
+    radar_pcd.points = o3d.utility.Vector3dVector(position(radar_cloud))
+    radar_pcd.paint_uniform_color([0, 0, 1])
+
+    o3d.visualization.draw_geometries([lidar_pcd, radar_pcd])
 
 
 def main():
@@ -663,6 +719,8 @@ def main():
     # fov_masking()
     warp_dphys()
     # depth_range_image()
+    # merge_heightmaps()
+    # radar_lidar_clouds()
 
 
 if __name__ == '__main__':

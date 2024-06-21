@@ -9,6 +9,7 @@ import rospy
 from sensor_msgs.msg import PointCloud2
 from dataproc.ros import slots
 from monoforce.datasets import robingas_seq_paths
+from argparse import ArgumentParser
 
 
 def fname2stamp(fname):
@@ -43,22 +44,28 @@ def process_bag(bag_path, fnames, radar_topic, radar_clouds_path, time_window, m
 
 
 def main():
+    parser = ArgumentParser()
+    parser.add_argument('--time_window', type=float, default=0.2)
+    parser.add_argument('--max_age', type=float, default=0.03)
+    args = parser.parse_args()
+
     paths = [
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/01_loop_flat/bags/',
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/02_bumpy_loop/bags/',
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/03_bmx_loop/bags/',
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/04_bmx_loop_no_navtech/bags/',
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/05_bumps_loop_no_navtech/bags/',
-        '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/06_flat_loop_no_navtech/bags/',
-        '/media/ruslan/data/bags/ORU/2024_02_07_Husky_campus_forest_bushes/bags/',
-        '/media/ruslan/data/bags/ORU/2024_04_27_Husky_Ruslan_second_longer_campus/bags/',
-        # '/media/ruslan/data/bags/ORU/2024_05_01_Husky_Ruslan_Viking_hills_dense/bags/',
-        '/media/ruslan/data/bags/ORU/2024_05_24_Husky_Viking_hills_high_grass/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/01_loop_flat/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/02_bumpy_loop/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/03_bmx_loop/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/04_bmx_loop_no_navtech/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/05_bumps_loop_no_navtech/bags/',
+        # '/media/ruslan/data/bags/ORU/2023_08_16_Husky_skate_park/06_flat_loop_no_navtech/bags/',
+        # '/media/ruslan/data/bags/ORU/2024_02_07_Husky_campus_forest_bushes/bags/',
+        # '/media/ruslan/data/bags/ORU/2024_04_27_Husky_Ruslan_second_longer_campus/bags/',
+        '/media/ruslan/data/bags/ORU/2024_05_01_Husky_Ruslan_Viking_hills_dense/bags/',
+        # '/media/ruslan/data/bags/ORU/2024_05_24_Husky_Viking_hills_high_grass/bags/',
     ]
     for path_i, path in enumerate(paths):
         assert os.path.exists(path)
         bag_paths = [os.path.join(path, f) for f in os.listdir(path) if f.endswith('.bag')]
-        lidar_clouds_path = os.path.join(robingas_seq_paths['husky_oru'][path_i], 'clouds/')
+        # lidar_clouds_path = os.path.join(robingas_seq_paths['husky_oru'][path_i], 'clouds/')
+        lidar_clouds_path = '/media/ruslan/data/datasets/RobinGas/husky_oru/radarize__2024-05-01-15-48-29_0/clouds/'
         radar_clouds_path = lidar_clouds_path.replace('/clouds', '/radar_clouds')
         os.makedirs(radar_clouds_path, exist_ok=True)
 
@@ -66,11 +73,12 @@ def main():
         radar_topic = '/hugin_raf_1/radar_data'
         for bag_path in bag_paths:
             # print('Processing', bag_path)
-            process_bag(bag_path, fnames, radar_topic, radar_clouds_path, time_window=0.2, max_age=0.03)
+            process_bag(bag_path, fnames, radar_topic, radar_clouds_path,
+                        time_window=args.time_window, max_age=args.max_age)
 
         n_lidar_files = len(fnames)
         n_radar_files = len(os.listdir(radar_clouds_path))
-        print(f'Saved {n_radar_files} radar scans out of {n_lidar_files} lidar scans for {os.path.basename(path)}')
+        print(f'Saved {n_radar_files} radar scans out of {n_lidar_files} lidar scans for {path}')
     print('Done')
 
 
