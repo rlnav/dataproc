@@ -638,15 +638,16 @@ def depth_range_image():
 
 
 def merge_heightmaps():
-    from scipy.spatial import cKDTree
+    from monoforce.cloudproc import merge_heightmaps
+    from monoforce.transformations import transform_cloud
 
-    ds = RobinGas(path=robingas_seq_paths['husky_oru'][-1], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    ds = RobinGas(path=robingas_seq_paths['husky_oru'][0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
 
-    n_frames = 10
+    n_frames = 100
     i = np.random.choice(range(len(ds)-n_frames))
     merged_hm_points = None
     global_hm_cloud = []
-    for i in tqdm(range(i, i+n_frames, 1)):
+    for i in tqdm(range(i, i+n_frames, 5)):
         hm = ds.get_geom_height_map(i)
         pose = ds.get_pose(i)
         hm_points = hm_to_cloud(hm[0], ds.dphys_cfg.d_max, mask=hm[1]).cpu().numpy()
@@ -656,18 +657,7 @@ def merge_heightmaps():
         if merged_hm_points is None:
             merged_hm_points = hm_points
         else:
-            merged_hm_xy = merged_hm_points[:, :2]
-            hm_xy = hm_points[:, :2]
-            tree = cKDTree(merged_hm_xy)
-            dists, idxs = tree.query(hm_xy, k=1)
-            common_points_mask = np.asarray(dists <= ds.dphys_cfg.grid_res)
-            print('Common points ratio:', common_points_mask.mean())
-            common_points = hm_points[common_points_mask]
-
-            X, Y = hm_xy[:, 0], hm_xy[:, 1]
-            Z = hm_points[:, 2]
-            Z[common_points_mask] = (Z[common_points_mask] + merged_hm_points[idxs[common_points_mask], 2]) / 2
-            merged_hm_points = np.column_stack((X, Y, Z))
+            merged_hm_points = merge_heightmaps(hm_points, merged_hm_points, ds.dphys_cfg.grid_res)
             print('Merged heightmap points shape:', merged_hm_points.shape)
 
         global_hm_cloud.append(hm_points)
@@ -676,13 +666,46 @@ def merge_heightmaps():
     # plot global cloud with open3d
     hm_pcd = o3d.geometry.PointCloud()
     hm_pcd.points = o3d.utility.Vector3dVector(global_hm_cloud)
-    hm_pcd.paint_uniform_color([0, 1, 0])
+    # hm_pcd.paint_uniform_color([0, 1, 0])
 
-    common_hm_pcd = o3d.geometry.PointCloud()
-    common_hm_pcd.points = o3d.utility.Vector3dVector(common_points)
-    common_hm_pcd.paint_uniform_color([0, 0, 1])
+    o3d.visualization.draw_geometries([hm_pcd])
 
-    o3d.visualization.draw_geometries([hm_pcd, common_hm_pcd])
+    # x = np.linspace(-6.4, 6.4, 128)
+    # y = np.linspace(-6.4, 6.4, 128)
+    # X, Y = np.meshgrid(x, y)
+    # Z1 = np.zeros_like(X)
+    # Z1[64:, :] = -1.0
+    #
+    # hm1 = np.stack((X, Y, Z1), axis=-1).reshape(-1, 3)
+    # pose1 = np.eye(4)
+    # hm1 = transform_cloud(hm1, pose1)
+    # print('Heightmap 1 z values:', np.unique(hm1[:, 2]))
+    #
+    # Z2 = np.zeros_like(X)
+    # Z2[:64, :] = 1.0
+    #
+    # hm2 = np.stack((X, Y, Z2), axis=-1).reshape(-1, 3)
+    # pose2 = np.eye(4)
+    # pose2[1, 3] = 6.4
+    # hm2 = transform_cloud(hm2, pose2)
+    # print('Heightmap 2 z values:', np.unique(hm2[:, 2]))
+    #
+    # hm_merged = merge_heightmaps(new_points=hm2.copy(), prev_points=hm1.copy())
+    # print('Merged heightmap z values:', np.unique(hm_merged[:, 2]))
+    #
+    # pcd1 = o3d.geometry.PointCloud()
+    # pcd1.points = o3d.utility.Vector3dVector(hm1)
+    # pcd1.paint_uniform_color([1, 0, 0])
+    #
+    # pcd2 = o3d.geometry.PointCloud()
+    # pcd2.points = o3d.utility.Vector3dVector(hm2)
+    # pcd2.paint_uniform_color([0, 1, 0])
+    #
+    # pcd_merged = o3d.geometry.PointCloud()
+    # pcd_merged.points = o3d.utility.Vector3dVector(hm_merged)
+    # pcd_merged.paint_uniform_color([0, 0, 1])
+    #
+    # o3d.visualization.draw_geometries([pcd1, pcd2, pcd_merged])
 
 
 def radar_lidar_clouds():
@@ -717,9 +740,9 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
-    warp_dphys()
+    # warp_dphys()
     # depth_range_image()
-    # merge_heightmaps()
+    merge_heightmaps()
     # radar_lidar_clouds()
 
 
