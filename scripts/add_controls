@@ -1,0 +1,74 @@
+#!/usr/bin/env python
+
+import os
+from rosbag import Bag
+from tqdm import tqdm
+import rospy
+from dataproc.io import write_to_csv, append_to_csv
+from monoforce.datasets import robingas_seq_paths
+from argparse import ArgumentParser
+
+
+def fname2stamp(fname):
+    secs, nsec = fname.split('.')[0].split('_')
+    assert len(secs) == 10
+    assert len(nsec) == 9
+    stamp = int(secs) + int(nsec) * 1e-9
+    return stamp
+
+
+def process_bag(bag_path, fnames, controls_topic, controls_path, time_window, max_age):
+    stamps = [fname2stamp(f) for f in fnames]
+    n_saved_controls = 0
+    # write_to_csv(controls_path, 'stamp, linear_v [m/sec], angular_w [rad/sec]\n')
+    write_to_csv(controls_path, 'stamp, left_track_vel [m/sec], right_track_vel [m/sec]\n')
+    with Bag(bag_path) as bag:
+        for i, stamp in tqdm(enumerate(stamps), total=len(stamps)):
+            tl = rospy.Time.from_sec(stamp - time_window/2.)
+            tr = rospy.Time.from_sec(stamp + time_window/2.)
+            for topic, msg, t in bag.read_messages(start_time=tl, end_time=tr, topics=[controls_topic]):
+                dt = abs(t.to_sec() - stamp)
+                if dt < max_age:
+                    # print('Found control at', t.to_sec(), 'in bag file', os.path.basename(bag_path))
+                    # linear_v = msg.linear.x
+                    # angular_w = msg.angular.z
+                    # append_to_csv(controls_path, f'{stamp}, {linear_v}, {angular_w}\n')
+                    left_track_vel = msg.left
+                    right_track_vel = msg.right
+                    append_to_csv(controls_path, f'{stamp}, {left_track_vel}, {right_track_vel}\n')
+
+                    n_saved_controls += 1
+                    break
+
+        print(f'Saved {n_saved_controls}/{len(stamps)} controls to {controls_path}')
+        bag.close()
+
+
+def main():
+    parser = ArgumentParser()
+    parser.add_argument('--time_window', type=float, default=0.5)
+    parser.add_argument('--max_age', type=float, default=0.07)
+    args = parser.parse_args()
+
+    bag_paths = [
+        '/media/ruslan/data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-30-57.bag',
+        '/media/ruslan/data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-14-05-42.bag',
+        '/media/ruslan/data/bags/robingas/data/22-10-20-unhost/ugv_2022-10-20-13-58-22.bag',
+    ]
+    for path_i, bag_path in enumerate(bag_paths):
+        assert os.path.exists(bag_path)
+        lidar_clouds_path = os.path.join(robingas_seq_paths['tradr'][path_i], 'clouds/')
+        # lidar_clouds_path = '/media/ruslan/data/datasets/RobinGas/tradr/ugv_2022-10-20-13-58-22/clouds/'
+        # controls_path = os.path.join(lidar_clouds_path.replace('/clouds', '/controls'), 'cmd_vel.csv')
+        controls_path = os.path.join(lidar_clouds_path.replace('/clouds', '/controls'), 'tracks_vel.csv')
+
+        fnames = os.listdir(lidar_clouds_path)
+        controls_topic = '/tracks_vel'
+        # controls_topic = '/nav/cmd_vel'
+        process_bag(bag_path, fnames, controls_topic, controls_path,
+                    time_window=args.time_window, max_age=args.max_age)
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()
