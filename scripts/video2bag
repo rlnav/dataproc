@@ -42,25 +42,37 @@ def video2bag(video_path, bag_path, topic_name, start_time=None):
     start_date_time = datetime.datetime.fromtimestamp(time() + time_offset)
     print(f'Start time: {start_date_time}')
 
+    # number of frames in the video
+    frame_count = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    print(f'Number of frames: {frame_count}')
+
+    # frame rate of the video
+    fps = cap.get(cv2.CAP_PROP_FPS)
+    print(f'Frame rate: {fps}')
+
     frame_id = 0
     while cap.isOpened():
         if rospy.is_shutdown():
             break
 
-        ret, frame = cap.read()
+        ret, image = cap.read()
         if not ret:
             print("End of video")
             break
 
-        stamp = rospy.Time.from_sec(time() + time_offset)
+        # t = time() + time_offset
+        t = start_time + frame_id / fps
+        stamp = rospy.Time.from_sec(t)
+        # date_t = datetime.datetime.fromtimestamp(t)
+        # print(f'Frame {frame_id}, time: {date_t}')
 
-        # compress frame and create CompressedImage message
+        # compress image and create CompressedImage message
         image_msg = CompressedImage()
         image_msg.format = "jpeg"
         image_msg.header.stamp = stamp
         image_msg.header.frame_id = str(frame_id)
-        image_msg.data = compress_img(frame)
-        bag.write(topic_name, image_msg)
+        image_msg.data = compress_img(image)
+        bag.write(topic_name, image_msg, stamp)
         frame_id += 1
 
     cap.release()
@@ -95,9 +107,9 @@ if __name__ == "__main__":
         video_path = os.path.join(folder_path, video_file)
         print('Processing %s' % video_file)
         bag_path = video_path.split('.')[0] + '.bag'
-        if os.path.exists(bag_path):
-            print('Bag file already exists for %s' % video_file)
-            continue
+        # if os.path.exists(bag_path):
+        #     print('Bag file already exists for %s' % video_file)
+        #     continue
         print('Creating bag file: %s' % bag_path)
         start_time = video_start_time_from_filename(video_path)
         date_time = datetime.datetime.fromtimestamp(start_time)
