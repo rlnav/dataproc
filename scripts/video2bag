@@ -1,0 +1,106 @@
+#! /usr/bin/env python
+
+import sys
+import cv2
+import numpy as np
+import rosbag
+import rospy
+from sensor_msgs.msg import CompressedImage
+from time import time
+import os
+import datetime
+from tqdm import tqdm
+
+
+def compress_img(img):
+    encode_param = [int(cv2.IMWRITE_JPEG_QUALITY), 90]
+    result, encimg = cv2.imencode('.jpg', img, encode_param)
+    return np.array(encimg).tobytes()
+
+def video_start_time_from_filename(video_path):
+    # fname format: <name>_<YYYYMMDD_hhmmss>.mp4
+    # for example: VID_20240718_140301.mp4
+    filename = video_path.split('/')[-1]
+    date_str = filename.split('_')[1]
+    time_str = filename.split('_')[2].split('.')[0]
+    datetime_str = date_str + '_' + time_str
+    datetime_obj = datetime.datetime.strptime(datetime_str, '%Y%m%d_%H%M%S')
+    return datetime_obj.timestamp()
+
+def video2bag(video_path, bag_path, topic_name, start_time=None):
+    rospy.init_node('video2bag', anonymous=True)
+
+    cap = cv2.VideoCapture(video_path)
+    if not cap.isOpened():
+        print("Error: video file not found")
+        return
+
+    bag = rosbag.Bag(bag_path, 'w')
+    print("Writing to bag file: %s" % bag_path)
+
+    time_offset = 0 if start_time is None else start_time - time()
+    start_date_time = datetime.datetime.fromtimestamp(time() + time_offset)
+    print(f'Start time: {start_date_time}')
+
+    frame_id = 0
+    while cap.isOpened():
+        if rospy.is_shutdown():
+            break
+
+        ret, frame = cap.read()
+        if not ret:
+            print("End of video")
+            break
+
+        stamp = rospy.Time.from_sec(time() + time_offset)
+
+        # compress frame and create CompressedImage message
+        image_msg = CompressedImage()
+        image_msg.format = "jpeg"
+        image_msg.header.stamp = stamp
+        image_msg.header.frame_id = str(frame_id)
+        image_msg.data = compress_img(frame)
+        bag.write(topic_name, image_msg)
+        frame_id += 1
+
+    cap.release()
+    bag.close()
+    print("Done")
+
+
+if __name__ == "__main__":
+    # if len(sys.argv) != 3:
+    #     print("Usage: video2bag.py <video_path> <topic_name>")
+    #     sys.exit(1)
+    #
+    # video_path = sys.argv[1]
+    # topic_name = sys.argv[2]
+    # bag_path = video_path.split('.')[0] + '.bag'
+    #
+    # # video_path = '/media/ruslan/SSD/data/bags/ORU/2024_07_18_Husky_navigation_lio_sam/Husky_ORU/VID_20240718_140301.mp4'
+    # # bag_path = video_path.split('.')[0] + '.bag'
+    # # topic_name = '/camera/image/compressed'
+    #
+    # start_time = video_start_time_from_filename(video_path)
+    # video2bag(video_path, bag_path, topic_name, start_time)
+
+    topic_name = '/redmi_camera/image/compressed'
+    folder_path = '/media/ruslan/SSD/data/bags/ORU/2024_07_18_Husky_navigation_lio_sam/Husky_ORU/'
+    mp4_files = [f for f in os.listdir(folder_path) if f.endswith('.mp4')]
+    if len(mp4_files) == 0:
+        print('No video files found in the folder')
+        sys.exit(1)
+
+    for video_file in tqdm(mp4_files):
+        video_path = os.path.join(folder_path, video_file)
+        print('Processing %s' % video_file)
+        bag_path = video_path.split('.')[0] + '.bag'
+        if os.path.exists(bag_path):
+            print('Bag file already exists for %s' % video_file)
+            continue
+        print('Creating bag file: %s' % bag_path)
+        start_time = video_start_time_from_filename(video_path)
+        date_time = datetime.datetime.fromtimestamp(start_time)
+        print(f'Start time: {date_time}, in seconds: {start_time}')
+        video2bag(video_path, bag_path, topic_name, start_time)
+        print('Bag file created for %s' % video_file)
