@@ -12,6 +12,7 @@ include_directories()
 catkin_install_python(PROGRAMS
   nodes/dataproc
   nodes/play_tf_static
+  nodes/gridmap_masker
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

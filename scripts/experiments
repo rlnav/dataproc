@@ -740,9 +740,9 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
-    # warp_dphys()
+    warp_dphys()
     # depth_range_image()
-    merge_heightmaps()
+    # merge_heightmaps()
     # radar_lidar_clouds()
 
 
