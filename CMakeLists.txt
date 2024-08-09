@@ -13,6 +13,7 @@ catkin_install_python(PROGRAMS
   nodes/dataproc
   nodes/play_tf_static
   nodes/cloud_proc
+  nodes/gridmap_masker
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

@@ -97,7 +97,7 @@ if __name__ == "__main__":
     # video2bag(video_path, bag_path, topic_name, start_time)
 
     topic_name = '/redmi_camera/image/compressed'
-    folder_path = '/media/ruslan/SSD/data/bags/ORU/2024_07_18_Husky_navigation_lio_sam/Husky_ORU/'
+    folder_path = '/media/ruslan/SSD/data/bags/ORU/2024_07_18_Husky_navigation_lio_sam/video/'
     mp4_files = [f for f in os.listdir(folder_path) if f.endswith('.mp4')]
     if len(mp4_files) == 0:
         print('No video files found in the folder')
