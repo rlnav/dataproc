@@ -3,7 +3,7 @@
 <launch>
     <arg name="robot" default="husky" doc="Robot name, [husky, tradr, marv]"/>
     <arg name="bag" default="" doc="Bag file to play"/>
-    <arg name="rviz" default="true" doc="Launch RViz for data visualization or not"/>
+    <arg name="rviz" default="false" doc="Launch RViz for data visualization or not"/>
     <arg name="rate" default="1." doc="Playback rate"/>
     <arg name="delay" default="3.0" doc="Delay in the bag file [sec]"/>
     <arg name="start" default="0." doc="Start moment in a bag file [sec]"/>
@@ -14,6 +14,13 @@
         <arg name="delay" value="$(arg delay)"/>
         <arg name="start" value="$(arg start)"/>
     </include>
+
+    <node if="0" name="cloud_proc" pkg="dataproc" type="cloud_proc" output="screen">
+        <rosparam subst_value="true">
+            cloud_topic: "/points"
+            max_msg_delay: 0.2
+        </rosparam>
+    </node>
 
     <!-- Visualization -->
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"

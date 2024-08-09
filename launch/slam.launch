@@ -3,7 +3,7 @@
     <arg name="cloud" default="ouster/points"/>
     <arg name="robot_frame" default="base_link"/>
     <arg name="odom_frame" default="odom"/>
-    <arg name="config" default="oru"/>
+    <arg name="config" default="ctu"/>
     <arg name="params" default="$(dirname)/../config/slam/mapper_node_$(arg config).params"/>
 
     <!-- ICP mapper node -->

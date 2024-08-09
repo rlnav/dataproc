@@ -15,15 +15,17 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 from scipy.spatial import cKDTree
 from mayavi import mlab
-from monoforce.datasets import RobinGas, Rellis3D
-from monoforce.datasets.robingas import robingas_seq_paths
-from monoforce.datasets.rellis3d import rellis3d_seq_paths
+# from monoforce.datasets import RobinGas, Rellis3D
+# from monoforce.datasets.robingas import robingas_seq_paths
+# from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
 from monoforce.models.dphysics_warp import DiffSim
 from monoforce.models.lss.model import compile_model
 import warp as wp
 from time import time
 
+# set matplotlib backend to show plots in separate window
+plt.switch_backend('Qt5Agg')
 
 monoforce_path = '../../monoforce'
 robot = 'husky_oru'
@@ -31,6 +33,19 @@ dphys_cfg = DPhysConfig()
 dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
 lss_cfg = read_yaml(os.path.join(monoforce_path, f'config/lss_cfg_{robot}.yaml'))
 
+
+def load_heightmap(path):
+    heightmap = np.load(path, allow_pickle=True).item()['z']
+    return heightmap
+
+
+def vw_to_track_vel(v, w, r=1.0):
+    # v: linear velocity, w: angular velocity, r: robot radius
+    # v = (v_r + v_l) / 2
+    # w = (v_r - v_l) / (2 * r)
+    v_r = v + r * w
+    v_l = v - r * w
+    return v_r, v_l
 
 def data_slicing():
     # robot = np.random.choice(['husky', 'husky_oru', 'tradr'])
@@ -487,20 +502,76 @@ def fov_masking():
     plt.show()
 
 
+def dphys():
+    from monoforce.models.dphysics import dphysics, State
+
+    tt = torch.linspace(0., dphys_cfg.traj_sim_time, dphys_cfg.n_samples)
+    device = 'cuda'
+    pose_step = 100
+
+    # H, W = int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res), int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res)
+    # height = np.zeros((H, W), dtype=np.float32)
+    # height[H // 3 * 2:, :] = 1.0
+
+    # # gaussian hm
+    x = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res))
+    y = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res))
+    X, Y = np.meshgrid(x, y)
+    height = (1.0 * np.exp(-1.0 * ((X - 0) ** 2 + (Y - 4) ** 2)) +
+              4.0 * np.exp(-5.0 * ((X - 1) ** 2 + (Y + 2) ** 2)) +
+              2.0 * np.exp(-3.0 * ((X + 2) ** 2 + (Y + 4) ** 2))
+              ) / 3.0
+    height = np.asarray(height, dtype=np.float32)
+
+    # initialize robot state
+    # yaw = np.random.random()-0.5
+    yaw = 0.
+    state0 = State(xyz=torch.tensor([0., 0., 0.], device=device).view(3, 1),
+                   rot=torch.as_tensor(Rotation.from_euler('z', yaw).as_matrix(),
+                                       dtype=torch.float32, device=device).view(3, 3),
+                   vel=torch.tensor([0., 0., 0.], device=device).view(3, 1),
+                   omega=torch.tensor([0., 0., 0.], device=device).view(3, 1),
+                   device=device)
+
+    # controls
+    ws = np.arange(-0.3, 0.4, 0.1).tolist() + np.arange(-0.3, 0.4, 0.1).tolist()
+    vs = (0.5 * np.ones(len(ws) // 2)).tolist() + (-0.5 * np.ones(int(len(ws) // 2))).tolist()
+    trajs = []
+    for v, w in zip(vs, ws):
+        vv = v * torch.ones(dphys_cfg.n_samples)
+        ww = w * torch.ones(dphys_cfg.n_samples)
+        controls = {'stamps': tt, 'linear_v': vv, 'angular_w': ww}
+
+        # predict states
+        with torch.no_grad():
+            states, _ = dphysics(height, controls, robot_model=robot, state=state0, dphys_cfg=dphys_cfg, device=device)
+
+            # get translation and rotation matrices
+            xyz = states[0][::pose_step].cpu().numpy()
+            Rs = states[1][::pose_step].cpu().numpy()
+            print('xyz:', xyz.shape)
+            print('Rs:', Rs.shape)
+            traj = np.zeros((len(xyz), 4, 4))
+            traj[:, :3, :3] = Rs
+            traj[:, :3, 3:4] = xyz
+            traj[:, 3, 3] = 1.
+            trajs.append(traj)
+
+    # show height map as a surface and best trajectory in 3D
+    fig = plt.figure(figsize=(10, 10))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.plot_surface(X, Y, height.T, cmap='jet', alpha=0.4)
+    # plot trajectoryies
+    for traj in trajs:
+        ax.plot(traj[:, 0, 3], traj[:, 1, 3], traj[:, 2, 3], 'b', linewidth=1)
+    set_axes_equal(ax)
+    ax.set_xlabel('X')
+    ax.set_ylabel('Y')
+    ax.set_zlabel('Z')
+    plt.show()
+
 def warp_dphys():
     wp.init()
-
-    def load_heightmap(path):
-        heightmap = np.load(path, allow_pickle=True).item()['z']
-        return heightmap
-
-    def vw_to_track_vel(v, w, r=1.0):
-        # v: linear velocity, w: angular velocity, r: robot radius
-        # v = (v_r + v_l) / 2
-        # w = (v_r - v_l) / (2 * r)
-        v_r = v + r * w
-        v_l = v - r * w
-        return v_r, v_l
 
     num_trajs = 100  # number of simulated trajectories (in parallel)
     dt = 0.001  # simulation timestep
@@ -517,8 +588,8 @@ def warp_dphys():
     hm[84:, :] = 0.2
 
     # # gaussian hm
-    # x = np.linspace(-6.4, 6.4, 128)
-    # y = np.linspace(-6.4, 6.4, 128)
+    # x = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, 128)
+    # y = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, 128)
     # X, Y = np.meshgrid(x, y)
     # hm = (1.0 * np.exp(-1.0 * ((X-0)**2 + (Y-4)**2)) +
     #              4.0 * np.exp(-5.0 * ((X-1)**2 + (Y+2)**2)) +
@@ -528,19 +599,30 @@ def warp_dphys():
     np_hms = [hm for _ in range(num_trajs)]
     res = [grid_res for _ in range(num_trajs)]
 
+    init_poses = np.zeros((num_trajs, 7))
+    quat = Rotation.from_euler('xyz', [0, 0, 30], degrees=True).as_quat()
+    init_poses[:, 2] = 0.2  # z coordinate
+    init_poses[:, 3:] = quat
+
     assert num_trajs % 2 == 0, 'num_trajs must be even'
     vel_max, omega_max = 0.5, 0.5
-    vels = np.concatenate([-vel_max * np.ones((num_trajs // 2, T)), vel_max * np.ones((num_trajs // 2, T))])
-    omegas = np.concatenate([np.linspace(-omega_max, omega_max, num_trajs // 2),
-                             np.linspace(-omega_max, omega_max, num_trajs // 2)])
+    vels_x = np.concatenate([-vel_max * np.ones((num_trajs // 2, T)), vel_max * np.ones((num_trajs // 2, T))])
+    omegas_z = np.concatenate([np.linspace(-omega_max, omega_max, num_trajs // 2),
+                               np.linspace(-omega_max, omega_max, num_trajs // 2)])
+    assert vels_x.shape == (num_trajs, T)
+    assert omegas_z.shape == (num_trajs,)
+    vels = np.zeros((num_trajs, T, 3))
+    vels[:, :, 0] = vels_x
+    omegas = np.zeros((num_trajs, 3))
+    omegas[:, 2] = omegas_z
 
     track_vels = np.zeros((num_trajs, T, 2))
     for i in range(num_trajs):
-        track_vels[i, :, 0], track_vels[i, :, 1] = vw_to_track_vel(vels[i], omegas[i])
+        track_vels[i, :, 0], track_vels[i, :, 1] = vw_to_track_vel(vels[i, :, 0], omegas[i, 2])
     flipper_angles = np.zeros((num_trajs, T, 4))
-    # flipper_angles[0, :, 0] = 0.5
 
     simulator = DiffSim(np_hms, res, T, use_renderer=False, device=device)
+    simulator.set_init_poses(init_poses)
     simulator.set_control(track_vels, flipper_angles)
 
     start = time()
@@ -740,9 +822,10 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
+    dphys()
     # warp_dphys()
     # depth_range_image()
-    merge_heightmaps()
+    # merge_heightmaps()
     # radar_lidar_clouds()
 
 

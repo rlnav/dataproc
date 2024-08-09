@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+
+import numpy as np
+import rospy
+from sensor_msgs.msg import PointCloud2
+from ros_numpy import numpify, msgify
+
+
+class CloudProc:
+    def __init__(self,
+                 cloud_topic='/points',
+                 max_msg_delay=0.1,
+                 ):
+        self.cloud_topic = cloud_topic
+        self.max_msgs_delay = max_msg_delay
+
+    def start(self):
+        """
+        Subscribing to point cloud topic.
+        """
+        self.proc_cloud_pub = rospy.Publisher(f'{self.cloud_topic}_proc', PointCloud2, queue_size=1)
+        self.cloud_sub = rospy.Subscriber(self.cloud_topic, PointCloud2, self.cloud_callback)
+
+    def cloud_callback(self, cloud_msg):
+        assert isinstance(cloud_msg, PointCloud2)
+
+        # Check if the message is delayed
+        if (rospy.Time.now() - cloud_msg.header.stamp).to_sec() > self.max_msgs_delay:
+            rospy.logwarn('Message is delayed by %f seconds!' % ((rospy.Time.now() - cloud_msg.header.stamp).to_sec()))
+            return
+
+        # Convert PointCloud2 to numpy array
+        cloud = numpify(cloud_msg)
+        rospy.logdebug('Input point cloud shape: %s' % str(cloud.shape))
+        if cloud.ndim > 1:
+            cloud = cloud.reshape(-1,)
+
+        # Process the point cloud: remove nan points
+        cloud = cloud[~np.isnan(cloud['x'])]
+        cloud = cloud[~np.isnan(cloud['y'])]
+        cloud = cloud[~np.isnan(cloud['z'])]
+        rospy.logdebug('Processed point cloud shape: %s' % str(cloud.shape))
+
+        # Publish the processed point cloud
+        cloud_msg_proc = msgify(PointCloud2, cloud)
+        cloud_msg_proc.header = cloud_msg.header
+        self.proc_cloud_pub.publish(cloud_msg_proc)
+
+    def spin(self):
+        try:
+            rospy.spin()
+        except rospy.ROSInterruptException:
+            pass
+
+
+def main():
+    rospy.init_node('cloud_proc', anonymous=True, log_level=rospy.DEBUG)
+
+    cloud_topic = rospy.get_param('~cloud_topic', '/points')
+    max_msg_delay = rospy.get_param('~max_msg_delay', 0.1)
+
+    node = CloudProc(cloud_topic=cloud_topic, max_msg_delay=max_msg_delay)
+    node.start()
+    node.spin()
+
+
+if __name__ == '__main__':
+    main()
