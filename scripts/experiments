@@ -27,7 +27,7 @@ from time import time
 # set matplotlib backend to show plots in separate window
 plt.switch_backend('Qt5Agg')
 
-monoforce_path = '../../monoforce'
+monoforce_path = '../../monoforce/monoforce'
 robot = 'husky_oru'
 dphys_cfg = DPhysConfig()
 dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
@@ -585,7 +585,7 @@ def warp_dphys():
 
     # step hm
     hm = np.zeros((128, 128))
-    hm[84:, :] = 0.2
+    hm[84:, :] = 0.4
 
     # # gaussian hm
     # x = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, 128)
@@ -600,7 +600,7 @@ def warp_dphys():
     res = [grid_res for _ in range(num_trajs)]
 
     init_poses = np.zeros((num_trajs, 7))
-    quat = Rotation.from_euler('xyz', [0, 0, 30], degrees=True).as_quat()
+    quat = Rotation.from_euler('xyz', [0, 0, 0], degrees=True).as_quat()
     init_poses[:, 2] = 0.2  # z coordinate
     init_poses[:, 3:] = quat
 
@@ -822,8 +822,8 @@ def main():
     # cloud_to_mesh()
     # data_test()
     # fov_masking()
-    dphys()
-    # warp_dphys()
+    # dphys()
+    warp_dphys()
     # depth_range_image()
     # merge_heightmaps()
     # radar_lidar_clouds()

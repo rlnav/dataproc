@@ -2,13 +2,13 @@ import os
 import numpy as np
 from monoforce.config import DPhysConfig
 from monoforce.datasets import robingas_seq_paths, RobinGasPoints, rellis3d_seq_paths, Rellis3DPoints
-from monoforce.datasets.utils import explore_data
+from monoforce.utils import explore_data
 from monoforce.utils import read_yaml
 
 
 def vis_data(dataset, robot='husky'):
-    dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
-    lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
+    dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
+    lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
 
     if dataset == 'robingas':
         data_paths = robingas_seq_paths[robot]
@@ -24,15 +24,16 @@ def vis_data(dataset, robot='husky'):
         lss_config = read_yaml(lss_config_path)
         dphys_cfg = DPhysConfig()
         dphys_cfg.from_yaml(dphys_config_path)
-        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg, use_rigid_semantics=False)
         ds = ds[np.random.choice(len(ds), 32, replace=False)]
-        explore_data(ds, sample_range='random', save=False)
+        for _ in range(5):
+            explore_data(ds, sample_range='random', save=False)
 
 
 def save_visuals():
     robot = 'husky_oru'
-    dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
-    lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
+    dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
+    lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
     data_paths = robingas_seq_paths[robot]
 
     lss_config = read_yaml(lss_config_path)
@@ -51,7 +52,8 @@ def save_visuals():
 def visualize():
     datasets = ['robingas']
     # robots = ['tradr', 'husky', 'husky_oru']
-    robots = ['husky_oru']
+    # robots = ['husky_oru']
+    robots = ['marv']
     for dataset in datasets:
         for robot in robots:
             vis_data(dataset, robot)
@@ -65,8 +67,8 @@ def draw_poses():
     from mayavi import mlab
 
     robot = 'husky_oru'
-    dphys_config_path = '../../monoforce/config/dphys_cfg.yaml'
-    lss_config_path = f'../../monoforce/config/lss_cfg_{robot}.yaml'
+    dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
+    lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
     data_paths = robingas_seq_paths[robot]
 
     lss_config = read_yaml(lss_config_path)

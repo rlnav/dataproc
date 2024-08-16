@@ -23,7 +23,7 @@
     </node>
 
     <node name="rosbag_play" pkg="rosbag" type="play"
-          args="--clock --delay $(arg delay) --rate $(arg rate) --start $(arg start) $(arg bag)">
+          args="--clock --delay $(arg delay) --rate $(arg rate) --start $(arg start) $(arg bag)" output="screen">
         <remap from="os_cloud_node/destaggered_points" to="points"/>
         <remap from="points_filtered_kontron" to="points"/>
     </node>
@@ -48,6 +48,34 @@
         <group ns="camera_right">
             <node name="debayer" pkg="nodelet" type="nodelet" args="standalone image_proc/debayer" respawn="false" output="screen">
                  <param name="image_transport" value="compressed"/>
+            </node>
+        </group>
+    </group>
+
+    <!-- Rectifying images with image_proc -->
+    <group>
+        <group ns="camera_front">
+            <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
+                 <param name="image_transport" value="compressed"/>
+                 <remap from="image_mono" to="image_color"/>
+            </node>
+        </group>
+        <group ns="camera_left">
+            <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
+                 <param name="image_transport" value="compressed"/>
+                 <remap from="image_mono" to="image_color"/>
+            </node>
+        </group>
+        <group ns="camera_rear">
+            <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
+                 <param name="image_transport" value="compressed"/>
+                 <remap from="image_mono" to="image_color"/>
+            </node>
+        </group>
+        <group ns="camera_right">
+            <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
+                 <param name="image_transport" value="compressed"/>
+                 <remap from="image_mono" to="image_color"/>
             </node>
         </group>
     </group>

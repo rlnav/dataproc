@@ -3,10 +3,15 @@
     <arg name="robot_frame" default="base_link"/>
     <arg name="max_msgs_delay" default="0.1"/>
     <arg name="save_time_period" default="1.0"/>
-    <arg name="lidar_topic" default="/ouster/points_deskewed"/>
-    <arg name="radar_topic" default="/hugin_raf_1/radar_data"/>
-    <arg name="img_topics" default="['/ids_camera/image_raw/compressed']"/>
-    <arg name="camera_info_topics" default="['/ids_camera/camera_info']"/>
+    <arg name="lidar_topic" default="/points"/>
+    <arg name="img_topics" default="['/camera_front/image_rect/compressed',
+                                     '/camera_left/image_rect/compressed',
+                                     '/camera_rear/image_rect/compressed',
+                                     '/camera_right/image_rect/compressed']"/>
+    <arg name="camera_info_topics" default="['/camera_front/camera_info',
+                                             '/camera_left/camera_info',
+                                             '/camera_rear/camera_info',
+                                             '/camera_right/camera_info']"/>
     <arg name="bag" default=""/>
 
 <!--     <param name="use_sim_time" value="true"/> -->
@@ -22,7 +27,6 @@
             img_topics: $(arg img_topics)
             camera_info_topics: $(arg camera_info_topics)
             lidar_topic: $(arg lidar_topic)
-            radar_topic: $(arg radar_topic)
             max_msgs_delay: $(arg max_msgs_delay)
             bag_path: $(arg bag)
             save_time_period: $(arg save_time_period)
