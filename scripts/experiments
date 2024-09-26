@@ -808,6 +808,19 @@ def radar_lidar_clouds():
     o3d.visualization.draw_geometries([lidar_pcd, radar_pcd])
 
 
+def robingas_test():
+    from monoforce.datasets import RobinGas, robingas_seq_paths
+
+    robot = 'marv'
+    for i in range(len(robingas_seq_paths[robot])):
+        ds = RobinGas(path=robingas_seq_paths[robot][i], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+        for j in tqdm(range(len(ds))):
+            t0 = time()
+            ts, controls = ds.get_controls(j)
+            t1 = time()
+            print('Time to get controls:', t1 - t0)
+
+
 def main():
     # data_slicing()
     # visualize_point_cloud_map()
@@ -823,10 +836,11 @@ def main():
     # data_test()
     # fov_masking()
     # dphys()
-    warp_dphys()
+    # warp_dphys()
     # depth_range_image()
     # merge_heightmaps()
     # radar_lidar_clouds()
+    robingas_test()
 
 
 if __name__ == '__main__':
