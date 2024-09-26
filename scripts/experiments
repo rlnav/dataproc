@@ -20,7 +20,7 @@ from mayavi import mlab
 # from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.config import DPhysConfig
 from monoforce.models.dphysics_warp import DiffSim
-from monoforce.models.lss.model import compile_model
+from monoforce.models.terrain_encoder.lss import compile_model
 import warp as wp
 from time import time
 
@@ -316,11 +316,11 @@ def segmentation_demo():
     lidar_points = position(ds.get_cloud(sample_i))
     points = []
     colors = []
-    n_cams = len(ds.cameras)
+    n_cams = len(ds.camera_names)
     plt.figure(figsize=(n_cams * 5, 5))
     plt.axis('off')
     for cam_i in range(n_cams):
-        cam = ds.cameras[cam_i]
+        cam = ds.camera_names[cam_i]
         rgb, K = ds.get_image(sample_i, camera=cam)
 
         seg_label_cam = ds.get_seg_label(sample_i, camera=cam)
@@ -356,7 +356,7 @@ def segmentation_demo():
         colors.append(seg_colors)
 
         # visualize
-        plt.subplot(1, len(ds.cameras), cam_i + 1)
+        plt.subplot(1, len(ds.camera_names), cam_i + 1)
         plt.imshow(rgb_seg)
         # plt.scatter(cam_points[:, 0], cam_points[:, 1], s=1, c=lidar_points[mask, 2],
         #             cmap='jet', alpha=0.2, vmin=-1, vmax=1)

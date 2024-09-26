@@ -26,8 +26,7 @@ def vis_data(dataset, robot='husky'):
         dphys_cfg.from_yaml(dphys_config_path)
         ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg, use_rigid_semantics=False)
         ds = ds[np.random.choice(len(ds), 32, replace=False)]
-        for _ in range(5):
-            explore_data(ds, sample_range='random', save=False)
+        explore_data(ds, sample_range='random', save=False)
 
 
 def save_visuals():

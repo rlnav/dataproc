@@ -1,0 +1,45 @@
+#!/usr/bin/env python
+
+import os
+from rosbag import Bag
+from tqdm import tqdm
+from dataproc.io import write_to_csv, append_to_csv
+from monoforce.datasets import robingas_seq_paths
+
+
+def fname2stamp(fname):
+    secs, nsec = fname.split('.')[0].split('_')
+    assert len(secs) == 10
+    assert len(nsec) == 9
+    stamp = int(secs) + int(nsec) * 1e-9
+    return stamp
+
+
+def process_bag(bag_path, controls_topic, controls_path):
+    print("Writing to", controls_path)
+    write_to_csv(controls_path, 'stamp, front_left_flipper_wheel [m/sec], front_right_flipper_wheel [m/sec], rear_left_flipper_wheel [m/sec], rear_right_flipper_wheel [m/sec]\n')
+    with Bag(bag_path) as bag:
+        for topic, msg, stamp in tqdm(bag.read_messages(topics=[controls_topic]),
+                                      total=bag.get_message_count(controls_topic)):
+            vels = msg.velocity  # front_left_flipper_wheel, front_right_flipper_wheel, rear_left_flipper_wheel, rear_right_flipper_wheel
+            append_to_csv(controls_path, f'{stamp}, {vels[0]}, {vels[1]}, {vels[2]}, {vels[3]}\n')
+        bag.close()
+
+
+def main():
+    bag_paths = [
+        '/home/ruslan/data/bags/monoforce/24-08-14-monoforce-marv-kn/24-08-14-monoforce-long_drive.bag',
+    ]
+    robot = 'marv'
+    controls_topic = '/marv/tracks/joint_states'
+    for path_i, bag_path in enumerate(bag_paths):
+        assert os.path.exists(bag_path)
+        lidar_clouds_path = os.path.join(robingas_seq_paths[robot][path_i], 'clouds/')
+        controls_path = os.path.join(lidar_clouds_path.replace('/clouds', '/controls'), 'tracks_vel.csv')
+
+        process_bag(bag_path, controls_topic, controls_path)
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()
