@@ -22,14 +22,16 @@ def process_bag(bag_path, controls_topic, controls_path):
 
 def main():
     bag_paths = [
-        '/home/ruslan/data/bags/monoforce/24-08-14-monoforce-marv-kn/24-08-14-monoforce-long_drive.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset_24-09-26/marv_2024-09-26-13-46-51.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset_24-09-26/marv_2024-09-26-13-54-43.bag',
     ]
     robot = 'marv'
     controls_topic = '/marv/tracks/joint_states'
     for path_i, bag_path in enumerate(bag_paths):
         assert os.path.exists(bag_path)
-        lidar_clouds_path = os.path.join(robingas_seq_paths[robot][path_i], 'clouds/')
-        controls_path = os.path.join(lidar_clouds_path.replace('/clouds', '/controls'), 'tracks_vel.csv')
+        data_path = bag_path.replace('.bag', '')
+        print(f'Processing {bag_path}...')
+        controls_path = os.path.join(data_path, 'controls', 'tracks_vel.csv')
 
         process_bag(bag_path, controls_topic, controls_path)
     print('Done')

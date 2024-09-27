@@ -2,6 +2,7 @@
 
 # This script synchronizes data DATASETS from a remote server
 DATA_PATH=/media/ruslan/SSD/data
+#DATA_PATH=/home/ruslan/data
 
 # list of DATASETS to process
 DATASETS=(

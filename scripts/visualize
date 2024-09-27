@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+
 import os
 import numpy as np
 from monoforce.config import DPhysConfig
@@ -24,13 +26,13 @@ def vis_data(dataset, robot='husky'):
         lss_config = read_yaml(lss_config_path)
         dphys_cfg = DPhysConfig()
         dphys_cfg.from_yaml(dphys_config_path)
-        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg, use_rigid_semantics=False)
+        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         ds = ds[np.random.choice(len(ds), 32, replace=False)]
         explore_data(ds, sample_range='random', save=False)
 
 
 def save_visuals():
-    robot = 'husky_oru'
+    robot = 'tradr2'
     dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
     lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
     data_paths = robingas_seq_paths[robot]
