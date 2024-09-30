@@ -1,13 +1,12 @@
 from __future__ import division, absolute_import, print_function
 import os
-import torch
 import numpy as np
 from scipy.ndimage import rotate
 from tqdm import tqdm
 from cv_bridge import CvBridge
 from dataproc.io import append_to_yaml
 from jsk_recognition_msgs.msg import BoundingBox
-from monoforce.utils import slots, timing
+from .utils import slots, timing
 from nav_msgs.msg import Path
 from geometry_msgs.msg import Pose, PoseStamped, Point, Quaternion, PoseArray, TransformStamped
 from tf.transformations import quaternion_from_matrix, quaternion_matrix
@@ -158,7 +157,7 @@ def to_cloud_msg(cloud, stamp=None, frame_id=None, fields=None):
 
 
 def to_pose_array(poses, stamp=None, frame_id=None):
-    assert isinstance(poses, np.ndarray) or isinstance(poses, torch.Tensor)
+    assert isinstance(poses, np.ndarray)
     assert poses.shape[1:] == (4, 4)
     pose_array = PoseArray()
     pose_array.header.stamp = stamp
@@ -170,7 +169,7 @@ def to_pose_array(poses, stamp=None, frame_id=None):
 
 
 def to_path(poses, stamp=None, frame_id=None):
-    assert isinstance(poses, np.ndarray) or isinstance(poses, torch.Tensor)
+    assert isinstance(poses, np.ndarray)
     assert poses.shape[1:] == (4, 4)
     if stamp is None:
         stamp = rospy.Time.now()
@@ -189,9 +188,9 @@ def to_path(poses, stamp=None, frame_id=None):
 
 
 def to_box_msg(pose, size, stamp=None, frame_id=None):
-    assert isinstance(pose, np.ndarray) or isinstance(pose, torch.Tensor)
+    assert isinstance(pose, np.ndarray)
     assert pose.shape == (4, 4)
-    assert isinstance(size, np.ndarray) or isinstance(size, torch.Tensor)
+    assert isinstance(size, np.ndarray)
     assert size.shape == (3,)
     box = BoundingBox()
     box.header.stamp = stamp
@@ -211,7 +210,7 @@ def to_box_msg(pose, size, stamp=None, frame_id=None):
 
 
 def to_marker(poses, color=None):
-    assert isinstance(poses, np.ndarray) or isinstance(poses, torch.Tensor)
+    assert isinstance(poses, np.ndarray)
     assert poses.shape[1:] == (4, 4)
     marker = Marker()
     marker.type = Marker.LINE_STRIP
@@ -249,7 +248,7 @@ def get_topic_types(bag):
     return {k: v.msg_type for k, v in bag.get_type_and_topic_info().topics.items()}
 
 
-@timing
+# @timing
 def get_closest_msg(bag, topic, time_moment, time_window=1.0,
                     max_time_diff=0.5, max_time_window=10.0,
                     verbose=False):
@@ -269,25 +268,26 @@ def get_closest_msg(bag, topic, time_moment, time_window=1.0,
     for topic, msg, stamp in bag.read_messages(topics=[topic],
                                                start_time=rospy.Time.from_seconds(tl),
                                                end_time=rospy.Time.from_seconds(tr)):
-        stamps_in_window.append(stamp)
+        stamps_in_window.append(stamp.to_sec())
         msgs.append(msg)
 
     if len(stamps_in_window) == 0:
-        # # raise Exception('No image messages in window')
+        # raise Exception('No image messages in window')
         print('No image messages in window for cloud time %.3f [sec] and topic "%s"' % (time_moment, topic))
         return None, None
 
-    time_diffs = np.abs(np.array([s.to_sec() for s in stamps_in_window]) - time_moment)
-    i_min = np.argmin(time_diffs)
-    msg = msgs[i_min]
-    msg_stamp = stamps_in_window[i_min]
+    # find the closest message
+    time_diffs = np.abs(np.array(stamps_in_window) - time_moment)
+    idx = np.argmin(time_diffs)
+    if time_diffs[idx] > max_time_diff:
+        if verbose:
+            print('Time difference %.3f [sec] is larger than the threshold %.3f [sec]' % (time_diffs[idx], max_time_diff))
+        return None, None
 
-    time_diff = np.min(time_diffs)
     if verbose:
-        print('Got the closest message with time difference: %.3f [sec]' % time_diff)
-    assert time_diff < max_time_diff, 'Time difference is too large: %.3f [sec]' % time_diff
+        print('Found the closest message with time difference %.3f [sec]' % time_diffs[idx])
 
-    return msg, msg_stamp
+    return msgs[idx], stamps_in_window[idx]
 
 
 def get_cams_robot_transformations(bag_path, camera_topics, robot_frame, tf_buffer, save=True, output_path=None):

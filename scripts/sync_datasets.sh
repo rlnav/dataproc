@@ -31,6 +31,6 @@ do
     echo "to target path $TARGET_PATH"
 
     # synchronize data
-    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*.mp4" --exclude='*terrain*' --exclude='*.bag' ${SOURCE_PATH} ${TARGET_PATH}
+    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*.mp4" --exclude='*terrain*' --exclude='*.bag' "${SOURCE_PATH}" "${TARGET_PATH}"
 done
 echo "Done synchronizing data."

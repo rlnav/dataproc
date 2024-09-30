@@ -1,0 +1,107 @@
+#!/usr/bin/env python
+
+import os
+from rosbag import Bag
+from tqdm import tqdm
+from dataproc.ros import get_closest_msg, load_tf_buffer, append_tf_to_yaml, write_intrinsics_to_yaml
+from dataproc.io import write_to_csv, append_to_csv
+from cv_bridge import CvBridge
+from sensor_msgs.msg import CameraInfo
+import cv2
+import numpy as np
+from image_transport_codecs.compressed_depth_codec import decode
+import rospy
+
+def fname2stamp(fname):
+    secs, nsec = fname.split('.')[0].split('_')
+    assert len(secs) == 10
+    assert len(nsec) == 9
+    stamp = int(secs) + int(nsec) * 1e-9
+    return stamp
+
+def save_images_from_bag(bag_path, rgb_topic, depth_topic, output_path, stamps):
+    rgb_path = os.path.join(output_path, 'rgb')
+    os.makedirs(rgb_path, exist_ok=True)
+    depth_path = os.path.join(output_path, 'depth')
+    os.makedirs(depth_path, exist_ok=True)
+    print(f"Writing RGB images to {rgb_path} and depth images to {depth_path}")
+    write_to_csv(os.path.join(output_path, 'stamps.csv'), 'rgb stamp [sec], lidar stamp [sec], depth stamp [sec]\n')
+    cv_bridge = CvBridge()
+    with Bag(bag_path) as bag:
+        for stamp in tqdm(stamps):
+            rgb_msg, _ = get_closest_msg(bag, rgb_topic, stamp, time_window=0.5, max_time_diff=0.2, verbose=False)
+            depth_msg, _ = get_closest_msg(bag, depth_topic, stamp, time_window=0.5, max_time_diff=0.2, verbose=False)
+            if rgb_msg is None:
+                print('No RGB message found for stamp', stamp)
+            elif depth_msg is None:
+                print('No depth message found for stamp', stamp)
+            else:
+                rgb_img = cv_bridge.compressed_imgmsg_to_cv2(rgb_msg)
+                # print('RGB image shape:', rgb_img.shape)
+
+                depth_raw = decode(depth_msg)[0]
+                if depth_raw is None:
+                    print('Failed to decode depth message')
+                    continue
+                depth_img = np.frombuffer(depth_raw.data, dtype=np.uint16).reshape(rgb_img.shape[:2])
+                # print('Depth image shape:', depth_img.shape)
+
+                # save images
+                cv2.imwrite(os.path.join(rgb_path, f'{stamp}.jpg'), rgb_img)
+                cv2.imwrite(os.path.join(depth_path, f'{stamp}.png'), depth_img)
+                append_to_csv(os.path.join(output_path, 'stamps.csv'), f'{stamp}, {rgb_msg.header.stamp.to_sec()}, {depth_msg.header.stamp.to_sec()}\n')
+        bag.close()
+
+
+def main():
+    rospy.init_node('add_luxonis_depth', anonymous=True, log_level=rospy.DEBUG)
+
+    bag_path = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset_24-09-26/marv_2024-09-26-13-46-51.bag'
+    data_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/RobinGas/marv/marv_2024-09-26-13-46-51/'
+    # bag_path = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset_24-09-26/marv_2024-09-26-13-54-43.bag'
+    # data_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/RobinGas/marv/marv_2024-09-26-13-54-43/'
+
+    rgb_topic = '/oak/rgb/image_raw/compressed'
+    depth_topic = '/oak/stereo/image_raw/compressedDepth'
+
+    assert os.path.exists(bag_path)
+    print(f'Processing {bag_path}...')
+    output_path = os.path.join(data_path, 'luxonis')
+    print(f'Output path: {output_path}')
+    calib_path = os.path.join(data_path, 'luxonis', 'calibration')
+
+    # find timestamps of lidar messages
+    clouds_path = os.path.join(data_path, 'clouds')
+    cloud_fnames = os.listdir(clouds_path)  # list of cloud filenames of format {sec}_{nsec}.npz
+    cloud_stamps = sorted([fname2stamp(fname) for fname in cloud_fnames])
+
+    # save images
+    save_images_from_bag(bag_path=bag_path,
+                         rgb_topic=rgb_topic, depth_topic=depth_topic,
+                         output_path=output_path,
+                         stamps=cloud_stamps)
+
+    # append tf to yaml: camera_link -> base_link
+    tf_buffer = load_tf_buffer([bag_path])
+    os.makedirs(calib_path, exist_ok=True)
+    append_tf_to_yaml(output_path=os.path.join(calib_path, 'transformations.yaml'),
+                      source_frame='oak_rgb_camera_optical_frame', target_frame='base_link',
+                      tf_buffer=tf_buffer)
+
+    # save camera intrinsics
+    rgb_info_topic = '/oak/rgb/camera_info'
+    depth_info_topic = '/oak/stereo/camera_info'
+    with Bag(bag_path) as bag:
+        for topic, msg, stamp in bag.read_messages(topics=[rgb_info_topic]):
+            write_intrinsics_to_yaml(output_dir=calib_path, msg=msg, camera_name='luxonis_rgb')
+            break
+        for topic, msg, stamp in bag.read_messages(topics=[depth_info_topic]):
+            write_intrinsics_to_yaml(output_dir=calib_path, msg=msg, camera_name='luxonis_depth')
+            break
+        bag.close()
+
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()

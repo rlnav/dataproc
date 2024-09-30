@@ -3,7 +3,7 @@
 import os
 import numpy as np
 from monoforce.config import DPhysConfig
-from monoforce.datasets import robingas_seq_paths, RobinGasPoints, rellis3d_seq_paths, Rellis3DPoints
+from monoforce.datasets import robingas_seq_paths, RobinGasVis, rellis3d_seq_paths, Rellis3DPoints
 from monoforce.utils import explore_data
 from monoforce.utils import read_yaml
 
@@ -14,7 +14,7 @@ def vis_data(dataset, robot='husky'):
 
     if dataset == 'robingas':
         data_paths = robingas_seq_paths[robot]
-        DataClass = RobinGasPoints
+        DataClass = RobinGasVis
     elif dataset == 'rellis3d':
         data_paths = rellis3d_seq_paths
         DataClass = Rellis3DPoints
@@ -77,7 +77,7 @@ def draw_poses():
     dphys_cfg.from_yaml(dphys_config_path)
 
     for path in data_paths:
-        ds = RobinGasPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         poses = ds.poses
         print('Poses shape:', poses.shape)
 
