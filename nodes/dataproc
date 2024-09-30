@@ -277,8 +277,7 @@ def main():
     lidar_topic = rospy.get_param('~lidar_topic', '/points')
     robot_frame = rospy.get_param('~robot_frame', 'base_link')
     max_msgs_delay = rospy.get_param('~max_msgs_delay', 0.1)
-    bag_path = rospy.get_param('~bag_path', '')
-    output_path = bag_path.split()[0].replace('.bag', '')
+    output_path = rospy.get_param('~output_path', '')
     save_time_period = rospy.get_param('~save_time_period', 1.0)
 
     node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics,
