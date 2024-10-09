@@ -1,0 +1,48 @@
+#!/usr/bin/env python
+
+import os
+from rosbag import Bag
+from tqdm import tqdm
+from dataproc.io import write_to_csv, append_to_csv
+
+
+def process_bag(bag_path, controls_topic, controls_path):
+    i = 0
+    with Bag(bag_path) as bag:
+        for topic, msg, stamp in tqdm(bag.read_messages(topics=[controls_topic]),
+                                      total=bag.get_message_count(controls_topic)):
+            joint_names = msg.name
+            joint_positions = msg.position
+            stamp = stamp.to_sec()
+            if i == 0:
+                write_to_csv(controls_path, 'stamp [sec],' + ' [rad],'.join(joint_names) + '\n')
+                i += 1
+            append_to_csv(controls_path, f'{stamp},' + ','.join(map(str, joint_positions)) + '\n')
+        bag.close()
+
+
+def main():
+    bag_paths = [
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-54-18.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-58-52.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-08-30.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-24-48.bag',
+    ]
+    controls_topic = '/joint_states'
+    for path_i, bag_path in enumerate(bag_paths):
+        assert os.path.exists(bag_path)
+        data_path = bag_path.replace('.bag', '')
+        print(f'Processing {bag_path}...')
+        controls_path = os.path.join(data_path, 'controls', 'joint_states.csv')
+        print('Saving to:', controls_path)
+        process_bag(bag_path, controls_topic, controls_path)
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()
