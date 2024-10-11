@@ -13,7 +13,7 @@
     <arg name="grid_res" default="0.1"/>
 
     <!-- Robot data: from bag file -->
-    <include file="$(dirname)/robingas_bag.launch">
+    <include file="$(dirname)/robot_bag.launch">
         <arg name="bag" value="$(arg bag)"/>
         <arg name="rviz" value="false"/>
         <arg name="rate" value="1"/>

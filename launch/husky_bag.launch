@@ -5,9 +5,9 @@
     <arg name="rate" default="1." doc="Playback rate"/>
     <arg name="delay" default="3.0" doc="Delay in the bag file [sec]"/>
     <arg name="start" default="0." doc="Start moment in a bag file [sec]"/>
-    <arg name="debayer" default="true" doc="Debayer images or not"/>
-    <arg name="bag" default="$(dirname)/../data/robingas/data/22-10-27-unhost-final-demo/husky_2022-10-27-15-33-57.bag"/>
-<!--    <arg name="bag" default="$(dirname)/../data/robingas/data/22-09-27-unhost/husky/husky_2022-09-27-15-01-44.bag"/> -->
+    <arg name="debayer" default="false" doc="Debayer images or not"/>
+    <arg name="rectify" default="false" doc="Rectify images or not"/>
+    <arg name="bag" default="/home/ruslan/Desktop/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-17-08.bag"/>
 
     <arg name="params" default="$(eval bag.split()[0] + '.params')"/>
     <rosparam command="load" file="$(arg params)"/>
@@ -20,6 +20,10 @@
     <node name="play_tf_static" pkg="dataproc" type="play_tf_static"
          args="$(arg bag)" output="log">
         <remap from="~tf_static" to="/tf_static"/>
+    </node>
+
+    <node name="rosbag_play_tf_static" pkg="rosbag" type="play"
+          args="-k --rate $(arg rate) /home/ruslan/Desktop/outdoor_dataset/24-10-05-pokor-petrin/marv_tf_static.bag" output="screen">
     </node>
 
     <node name="rosbag_play" pkg="rosbag" type="play"
@@ -53,7 +57,7 @@
     </group>
 
     <!-- Rectifying images with image_proc -->
-    <group>
+    <group if="$(arg rectify)">
         <group ns="camera_front">
             <node name="rectify" pkg="nodelet" type="nodelet" args="standalone image_proc/rectify" respawn="false" output="screen">
                  <param name="image_transport" value="compressed"/>

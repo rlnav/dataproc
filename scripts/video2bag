@@ -96,14 +96,15 @@ if __name__ == "__main__":
     # start_time = video_start_time_from_filename(video_path)
     # video2bag(video_path, bag_path, topic_name, start_time)
 
-    topic_name = '/redmi_camera/image/compressed'
-    folder_path = '/media/ruslan/SSD/data/bags/ORU/2024_07_18_Husky_navigation_lio_sam/video/'
-    mp4_files = [f for f in os.listdir(folder_path) if f.endswith('.mp4')]
-    if len(mp4_files) == 0:
+    topic_name = '/phone_camera/image/compressed'
+    folder_path = '/home/ruslan/Desktop/videos/'
+    # video_files = [f for f in os.listdir(folder_path) if f.endswith('.mp4')]
+    video_files = [f for f in os.listdir(folder_path) if f.endswith('.MOV')]
+    if len(video_files) == 0:
         print('No video files found in the folder')
         sys.exit(1)
 
-    for video_file in tqdm(mp4_files):
+    for video_file in tqdm(video_files):
         video_path = os.path.join(folder_path, video_file)
         print('Processing %s' % video_file)
         bag_path = video_path.split('.')[0] + '.bag'

@@ -1,8 +1,9 @@
 #!/bin/bash
 
 # This script synchronizes data DATASETS from a remote server
-DATA_PATH=/media/ruslan/SSD/data
+#DATA_PATH=/media/ruslan/SSD/data
 #DATA_PATH=/home/ruslan/data
+DATA_PATH=/media/ruslan/VRAS-DATA\ 4TB\ 2
 
 # list of DATASETS to process
 DATASETS=(
@@ -17,10 +18,10 @@ SERVER=login3.rci.cvut.cz
 # shellcheck disable=SC2068
 for DS in ${DATASETS[@]};
 do
-    SOURCE_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$DS
-    TARGET_PATH=${DATA_PATH}/$DS
-#    SOURCE_PATH=${DATA_PATH}/$DS
-#    TARGET_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$DS
+#    SOURCE_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$DS
+#    TARGET_PATH=${DATA_PATH}/$DS
+    SOURCE_PATH="${DATA_PATH}"/$DS
+    TARGET_PATH=${USER_NAME}@$SERVER:/mnt/personal/agishrus/data/$DS
 
 #    # if target path does not exist, create it
 #    if [ ! -d "$TARGET_PATH" ]; then
@@ -31,6 +32,6 @@ do
     echo "to target path $TARGET_PATH"
 
     # synchronize data
-    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*.mp4" --exclude='*terrain*' --exclude='*.bag' "${SOURCE_PATH}" "${TARGET_PATH}"
+    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*video*" --exclude='*terrain*' --exclude='*.bag' "${SOURCE_PATH}" "${TARGET_PATH}"
 done
 echo "Done synchronizing data."

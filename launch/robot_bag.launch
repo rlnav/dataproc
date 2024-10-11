@@ -15,13 +15,6 @@
         <arg name="start" value="$(arg start)"/>
     </include>
 
-    <node if="0" name="cloud_proc" pkg="dataproc" type="cloud_proc" output="screen">
-        <rosparam subst_value="true">
-            cloud_topic: "/points"
-            max_msg_delay: 0.2
-        </rosparam>
-    </node>
-
     <!-- Visualization -->
     <node if="$(arg rviz)" name="rviz" pkg="rviz" type="rviz"
           args="-d $(dirname)/../config/rviz/$(arg robot).rviz"/>

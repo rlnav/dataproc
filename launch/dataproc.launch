@@ -3,7 +3,7 @@
     <arg name="robot_frame" default="base_link"/>
     <arg name="max_msgs_delay" default="0.2"/>
     <arg name="save_time_period" default="1.0"/>
-    <arg name="lidar_topic" default="/points_filtered_kontron"/>
+    <arg name="lidar_topic" default="/points"/>
     <arg name="img_topics" default="['/camera_front/image_color/compressed',
                                      '/camera_left/image_color/compressed',
                                      '/camera_rear/image_color/compressed',
