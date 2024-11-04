@@ -7,7 +7,7 @@ DATA_PATH=/media/ruslan/VRAS-DATA\ 4TB\ 2
 
 # list of DATASETS to process
 DATASETS=(
-            'datasets/RobinGas/'
+            'datasets/ROUGH/'
 #            'datasets/Rellis3D/'
 )
 
@@ -32,6 +32,6 @@ do
     echo "to target path $TARGET_PATH"
 
     # synchronize data
-    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*video*" --exclude='*terrain*' --exclude='*.bag' "${SOURCE_PATH}" "${TARGET_PATH}"
+    rsync -r --progress --ignore-existing --exclude="*visuals*" --exclude="*resized*" --exclude="*mp4*" --exclude='*terrain*' --exclude='*.bag' "${SOURCE_PATH}" "${TARGET_PATH}"
 done
 echo "Done synchronizing data."

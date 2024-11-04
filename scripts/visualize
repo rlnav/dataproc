@@ -2,31 +2,32 @@
 
 import os
 import numpy as np
-from monoforce.config import DPhysConfig
-from monoforce.datasets import robingas_seq_paths, RobinGasVis, rellis3d_seq_paths, Rellis3DPoints
+from monoforce.dphys_config import DPhysConfig
+from monoforce.datasets import rough_seq_paths, ROUGHPoints, rellis3d_seq_paths, Rellis3DPoints
 from monoforce.utils import explore_data
 from monoforce.utils import read_yaml
 
 
 def vis_data(dataset, robot='husky'):
-    dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
-    lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
+    if robot in ['husky_oru', 'tradr']:
+        lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
+    else:
+        lss_config_path = '../../monoforce/monoforce/config/lss_cfg.yaml'
 
-    if dataset == 'robingas':
-        data_paths = robingas_seq_paths[robot]
-        DataClass = RobinGasVis
+    if dataset == 'rough':
+        data_paths = rough_seq_paths[robot]
+        DataClass = ROUGHPoints
     elif dataset == 'rellis3d':
         data_paths = rellis3d_seq_paths
         DataClass = Rellis3DPoints
     else:
-        raise ValueError('Invalid dataset %s. Supported: rellis3d and robingas' % dataset)
+        raise ValueError('Invalid dataset %s. Supported: rellis3d and rough' % dataset)
 
     for path in data_paths:
         assert os.path.isdir(path), 'Data path %s does not exist' % path
         lss_config = read_yaml(lss_config_path)
-        dphys_cfg = DPhysConfig()
-        dphys_cfg.from_yaml(dphys_config_path)
-        ds = DataClass(path, is_train=True, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        dphys_cfg = DPhysConfig(robot=robot)
+        ds = DataClass(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         ds = ds[np.random.choice(len(ds), 32, replace=False)]
         explore_data(ds, sample_range='random', save=False)
 
@@ -35,7 +36,7 @@ def save_visuals():
     robot = 'tradr2'
     dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
     lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
-    data_paths = robingas_seq_paths[robot]
+    data_paths = rough_seq_paths[robot]
 
     lss_config = read_yaml(lss_config_path)
     dphys_cfg = DPhysConfig()
@@ -47,13 +48,11 @@ def save_visuals():
             print('Visuals already exist for %s' % path)
             continue
         print('Saving visuals for %s' % os.path.basename(path))
-        ds = RobinGasPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = ROUGHPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         explore_data(ds, sample_range='all', save=True)
 
 def visualize():
-    datasets = ['robingas']
-    # robots = ['tradr', 'husky', 'husky_oru']
-    # robots = ['husky_oru']
+    datasets = ['rough']
     robots = ['marv']
     for dataset in datasets:
         for robot in robots:
@@ -70,14 +69,14 @@ def draw_poses():
     robot = 'husky_oru'
     dphys_config_path = '../../monoforce/monoforce/config/dphys_cfg.yaml'
     lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
-    data_paths = robingas_seq_paths[robot]
+    data_paths = rough_seq_paths[robot]
 
     lss_config = read_yaml(lss_config_path)
     dphys_cfg = DPhysConfig()
     dphys_cfg.from_yaml(dphys_config_path)
 
     for path in data_paths:
-        ds = RobinGasVis(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
+        ds = ROUGHPoints(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
         poses = ds.poses
         print('Poses shape:', poses.shape)
 
