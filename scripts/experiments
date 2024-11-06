@@ -15,10 +15,10 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 from scipy.spatial import cKDTree
 from mayavi import mlab
-# from monoforce.datasets import RobinGas, Rellis3D
-# from monoforce.datasets.robingas import robingas_seq_paths
-# from monoforce.datasets.rellis3d import rellis3d_seq_paths
-from monoforce.config import DPhysConfig
+from monoforce.datasets import ROUGH, Rellis3D
+from monoforce.datasets.rough import rough_seq_paths
+from monoforce.datasets.rellis3d import rellis3d_seq_paths
+from monoforce.dphys_config import DPhysConfig
 from monoforce.models.dphysics_warp import DiffSim
 from monoforce.models.terrain_encoder.lss import compile_model
 import warp as wp
@@ -28,10 +28,9 @@ from time import time
 plt.switch_backend('Qt5Agg')
 
 monoforce_path = '../../monoforce/monoforce'
-robot = 'husky_oru'
-dphys_cfg = DPhysConfig()
-dphys_cfg.from_yaml(os.path.join(monoforce_path, 'config/dphys_cfg.yaml'))
-lss_cfg = read_yaml(os.path.join(monoforce_path, f'config/lss_cfg_{robot}.yaml'))
+robot = 'marv'
+dphys_cfg = DPhysConfig(robot=robot)
+lss_cfg = read_yaml(os.path.join(monoforce_path, f'config/lss_cfg.yaml'))
 
 
 def load_heightmap(path):
@@ -50,9 +49,9 @@ def vw_to_track_vel(v, w, r=1.0):
 def data_slicing():
     # robot = np.random.choice(['husky', 'husky_oru', 'tradr'])
     robot = 'husky_oru'
-    path = np.random.choice(robingas_seq_paths[robot])
+    path = np.random.choice(rough_seq_paths[robot])
     print(f"Processing sequence: {os.path.basename(path)}")
-    ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
+    ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
     ids = np.random.choice(range(len(ds)), 10)
     print(f"Selected sample ids: {ids}")
     ds_slice = ds[ids]
@@ -69,11 +68,11 @@ def create_global_cloud_map():
     """
     dist_th = 0.1
     robot = 'husky_oru'
-    paths = robingas_seq_paths[robot]
+    paths = rough_seq_paths[robot]
 
     for path in paths:
         print('Processing sequence:', path)
-        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
+        ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
 
         # create global cloud
         poses = ds.get_poses()
@@ -110,14 +109,14 @@ def visualize_point_cloud_map():
     """
     Visualize point cloud map and trajectory point cloud
     """
-    # paths = robingas_seq_paths['husky']
-    paths = robingas_seq_paths['husky_oru']
+    # paths = rough_seq_paths['husky']
+    paths = rough_seq_paths['husky_oru']
 
     for path in paths:
         if not os.path.exists(path):
             print(f'Path {path} does not exist')
             continue
-        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
+        ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
         poses = ds.get_poses()
 
         map_path = os.path.join(path, 'global_cloud.pcd')
@@ -214,13 +213,13 @@ def check_interpolate_poses():
 
 
 def vis_camera_poses():
-    from monoforce.datasets import RobinGasBase
+    from monoforce.datasets import ROUGH
 
-    for path in robingas_seq_paths['husky']:
+    for path in rough_seq_paths['husky']:
         assert os.path.exists(path)
 
         cfg = DPhysConfig()
-        ds = RobinGasBase(path, dphys_cfg=dphys_cfg)
+        ds = ROUGH(path, dphys_cfg=dphys_cfg)
 
         robot_pose = np.eye(4)
         robot_frame = 'base_link'
@@ -248,9 +247,9 @@ def vis_trajectory():
 
     lss_cfg = read_yaml('../config/lss_cfg_tradr.yaml')
 
-    paths = robingas_seq_paths['husky']
+    paths = rough_seq_paths['husky']
     for path in paths:
-        ds = RobinGas(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
+        ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
         poses = ds.get_poses()
 
         mlab.figure(size=(800, 800))
@@ -259,13 +258,13 @@ def vis_trajectory():
 
 
 def vis_data():
-    from monoforce.datasets import RobinGas, Rellis3D
+    from monoforce.datasets import ROUGH, Rellis3D
 
     # paths = rellis3d_seq_paths
-    paths = robingas_seq_paths[robot]
+    paths = rough_seq_paths[robot]
 
     for path in paths:
-        ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=True)
+        ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=True)
         # ds = Rellis3D(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         i = np.random.choice(range(len(ds)))
         print(f'Visualizing sample {i} from {os.path.basename(path)}...')
@@ -307,9 +306,9 @@ def segmentation_demo():
     selected_classes = np.copy(coco_classes)
     # selected_classes = ['person']
 
-    path = robingas_seq_paths['tradr'][2]
+    path = rough_seq_paths['tradr'][2]
 
-    ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     # sample_i = np.random.choice(range(len(ds)))
     sample_i = 0
 
@@ -373,12 +372,12 @@ def segmentation_demo():
 
 
 def semantic_heightmap():
-    from monoforce.datasets import RobinGas
+    from monoforce.datasets import ROUGH
     from monoforce.config import DPhysConfig
     from dataproc.cloudproc import hm_to_cloud, estimate_heightmap
 
-    path = robingas_seq_paths['tradr'][2]
-    ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    path = rough_seq_paths['tradr'][2]
+    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     for i in np.random.choice(range(len(ds)), 5):
         # seg_points, seg_colors = ds.get_semantic_cloud(i, classes=classes, vis=False)
         # seg_colors = normalize(seg_colors)
@@ -408,7 +407,7 @@ def semantic_heightmap():
 
 
 def cloud_to_mesh():
-    path = robingas_seq_paths['husky_oru'][0]
+    path = rough_seq_paths['husky_oru'][0]
     cloud_path = os.path.join(path, 'global_map.pcd')
     mesh_path = os.path.join(path, 'global_map.obj')
     assert os.path.exists(cloud_path)
@@ -439,8 +438,8 @@ def data_test():
     # Data = Rellis3D
     # lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_husky.yaml'))
 
-    paths = robingas_seq_paths['tradr']
-    Data = RobinGas
+    paths = rough_seq_paths['tradr']
+    Data = ROUGH
     lss_cfg = read_yaml(os.path.join(monoforce_path, 'config/lss_cfg_tradr.yaml'))
     for path in paths:
         ds = Data(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg, is_train=True)
@@ -455,9 +454,9 @@ def fov_masking():
     from skimage.draw import polygon
 
     robot = np.random.choice(['husky', 'husky_oru', 'tradr'])
-    path = np.random.choice(robingas_seq_paths[robot])
+    path = np.random.choice(rough_seq_paths[robot])
 
-    ds = RobinGas(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=False)
+    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False, only_front_cam=False)
     i = np.random.choice(range(len(ds)))
     print(f'Visualizing sample {i} from {os.path.basename(path)}...')
 
@@ -579,7 +578,7 @@ def warp_dphys():
     device = "cuda"
     grid_res = 0.1
 
-    # hm_dir = os.path.join(robingas_seq_paths['husky_oru'][0], 'terrain/lidar/')
+    # hm_dir = os.path.join(rough_seq_paths['husky_oru'][0], 'terrain/lidar/')
     # hm_path = os.path.join(hm_dir, np.random.choice(os.listdir(hm_dir)))
     # hm = load_heightmap(hm_path)
 
@@ -678,12 +677,12 @@ def warp_dphys():
 
 
 def depth_range_image():
-    from monoforce.datasets import RobinGasRGBD
+    from monoforce.datasets import ROUGHRGBD
 
     robot = 'husky_oru'
-    paths = robingas_seq_paths[robot][:6] + [robingas_seq_paths[robot][-3]] + [robingas_seq_paths[robot][-1]]
+    paths = rough_seq_paths[robot][:6] + [rough_seq_paths[robot][-3]] + [rough_seq_paths[robot][-1]]
     for path in paths[-1:]:
-        ds = RobinGasRGBD(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+        ds = ROUGHRGBD(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         i = np.random.choice(range(len(ds)))
 
         rgb, K = ds.get_image(i)
@@ -723,7 +722,7 @@ def merge_heightmaps():
     from monoforce.cloudproc import merge_heightmaps
     from monoforce.transformations import transform_cloud
 
-    ds = RobinGas(path=robingas_seq_paths['husky_oru'][0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    ds = ROUGH(path=rough_seq_paths['husky_oru'][0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
 
     n_frames = 100
     i = np.random.choice(range(len(ds)-n_frames))
@@ -791,7 +790,7 @@ def merge_heightmaps():
 
 
 def radar_lidar_clouds():
-    ds = RobinGas(path=robingas_seq_paths['husky_oru'][-2], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    ds = ROUGH(path=rough_seq_paths['husky_oru'][-2], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
 
     i = 100
     lidar_cloud = ds.get_cloud(i, points_source='lidar')
@@ -808,17 +807,94 @@ def radar_lidar_clouds():
     o3d.visualization.draw_geometries([lidar_pcd, radar_pcd])
 
 
-def robingas_test():
-    from monoforce.datasets import RobinGas, robingas_seq_paths
+def rough_test():
+    from monoforce.datasets import ROUGH, rough_seq_paths
 
     robot = 'marv'
-    for i in range(len(robingas_seq_paths[robot])):
-        ds = RobinGas(path=robingas_seq_paths[robot][i], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    for i in range(len(rough_seq_paths[robot])):
+        ds = ROUGH(path=rough_seq_paths[robot][i], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
         for j in tqdm(range(len(ds))):
             t0 = time()
             ts, controls = ds.get_controls(j)
             t1 = time()
             print('Time to get controls:', t1 - t0)
+
+
+def bevfusion_test():
+    from torch.utils.data import DataLoader
+    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
+
+    class Data(ROUGH):
+        def __init__(self, path, lss_cfg, dphys_cfg=DPhysConfig(), is_train=True):
+            super(Data, self).__init__(path, lss_cfg, dphys_cfg=dphys_cfg, is_train=is_train)
+
+        def get_cloud(self, i, points_source='lidar'):
+            cloud = self.get_raw_cloud(i)
+            # move points to robot frame
+            Tr = self.calib['transformations']['T_base_link__os_sensor']['data']
+            Tr = np.asarray(Tr, dtype=float).reshape((4, 4))
+            cloud = transform_cloud(cloud, Tr)
+            return cloud
+
+        def get_sample(self, i):
+            imgs, rots, trans, intrins, post_rots, post_trans = self.get_images_data(i)
+            points = torch.as_tensor(position(self.get_cloud(i))).T
+            return (imgs, rots, trans, intrins, post_rots, post_trans, points)
+
+    device = 'cpu'
+    ds = Data(path=rough_seq_paths['marv'][0], lss_cfg=lss_cfg)
+    print(f'Dataset length: {len(ds)}')
+
+    bevfusion = BEVFusion(grid_conf=lss_cfg['grid_conf'], data_aug_conf=lss_cfg['data_aug_conf'])
+    bevfusion.to(device)
+    print(f'Number of BEVFusion model parameters: {sum(p.numel() for p in bevfusion.parameters())}')
+
+    i = 0  # np.random.choice(range(len(ds)))
+    sample = ds[i]
+    (imgs, rots, trans, intrins, post_rots, post_trans, points) = sample
+
+    # Remove nans saving dimensions
+    points[torch.isnan(points)] = 0
+    assert points.shape[0] == 3
+
+    # Filter points
+    mask_x = (points[0] > -6.4) & (points[0] < 6.4)
+    mask_y = (points[1] > -6.4) & (points[1] < 6.4)
+    mask_z = (points[2] > -1.0) & (points[2] < 1.0)
+    mask = mask_x & mask_y & mask_z
+    points = points[:, mask]
+
+    # # Find the minimum point per batch in the point cloud
+    # min_bound = points.min(dim=-1, keepdim=True)[0]  # Shape (3, 1)
+    # assert min_bound.shape == (3, 1)
+    #
+    # # Subtract the minimum point and scale by voxel size
+    # voxel_size = 0.1
+    # grid_size = (64, 128, 128)
+    # shifted_points = (points - min_bound) / voxel_size  # Normalize and scale
+    #
+    # # Floor the points to get voxel indices
+    # grid_indices = torch.floor(shifted_points).long()  # Shape (B, 3, N)
+    #
+    # # Create a batch of voxel grids and mark occupied voxels
+    # voxel_grid = torch.zeros((grid_size), device=points.device, dtype=torch.float32)  # (B, D, H, W)
+    # ids_x = torch.clamp(grid_indices, 0, grid_size[0] - 1)[0, :]
+    # ids_y = torch.clamp(grid_indices, 0, grid_size[1] - 1)[1, :]
+    # ids_z = torch.clamp(grid_indices, 0, grid_size[2] - 1)[2, :]
+    # voxel_grid[ids_x, ids_y, ids_z] = 1.0
+    # print('Voxels grid shape:', voxel_grid.shape)
+
+    # plot voxels
+    fig = plt.figure(figsize=(20, 10))
+    # ax = fig.add_subplot(121, projection='3d')
+    # ax.voxels(voxel_grid)
+    # set_axes_equal(ax)
+
+    ax = fig.add_subplot(122, projection='3d')
+    ax.scatter(points[0, ::10], points[1, ::10], points[2, ::10], s=1)
+    set_axes_equal(ax)
+
+    plt.show()
 
 
 def main():
@@ -840,7 +916,8 @@ def main():
     # depth_range_image()
     # merge_heightmaps()
     # radar_lidar_clouds()
-    robingas_test()
+    # rough_test()
+    bevfusion_test()
 
 
 if __name__ == '__main__':
