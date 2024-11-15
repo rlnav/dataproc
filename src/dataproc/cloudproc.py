@@ -1,7 +1,6 @@
 import torch
 from .segmentation import affine
 from .transformations import rot2rpy, rpy2rot
-# from .transformations import rot2rpy, rpy2rot
 from .utils import position
 import numpy as np
 from scipy.interpolate import griddata
