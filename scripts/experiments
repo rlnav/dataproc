@@ -15,9 +15,8 @@ from scipy.spatial.transform import Rotation
 from scipy.spatial.transform import Slerp
 from scipy.spatial import cKDTree
 from mayavi import mlab
-from monoforce.datasets import ROUGH, Rellis3D
+from monoforce.datasets import ROUGH
 from monoforce.datasets.rough import rough_seq_paths
-from monoforce.datasets.rellis3d import rellis3d_seq_paths
 from monoforce.dphys_config import DPhysConfig
 from monoforce.models.dphysics_warp import DiffSim
 from monoforce.models.terrain_encoder.lss import compile_model
@@ -822,7 +821,7 @@ def rough_test():
 
 def bevfusion_test():
     from torch.utils.data import DataLoader
-    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
+    from monoforce.models.terrain_encoder.bevfusion import BEVFusion, LiDARBEV
 
     class Data(ROUGH):
         def __init__(self, path, lss_cfg, dphys_cfg=DPhysConfig(), is_train=True):
@@ -841,58 +840,52 @@ def bevfusion_test():
             points = torch.as_tensor(position(self.get_cloud(i))).T
             return (imgs, rots, trans, intrins, post_rots, post_trans, points)
 
-    device = 'cpu'
-    ds = Data(path=rough_seq_paths['marv'][0], lss_cfg=lss_cfg)
+    device = 'cuda'
+    ds = Data(path=rough_seq_paths[0], lss_cfg=lss_cfg)
+    loader = DataLoader(ds, batch_size=4, shuffle=False)
     print(f'Dataset length: {len(ds)}')
 
-    bevfusion = BEVFusion(grid_conf=lss_cfg['grid_conf'], data_aug_conf=lss_cfg['data_aug_conf'])
-    bevfusion.to(device)
-    print(f'Number of BEVFusion model parameters: {sum(p.numel() for p in bevfusion.parameters())}')
+    # bevfusion = BEVFusion(grid_conf=lss_cfg['grid_conf'], data_aug_conf=lss_cfg['data_aug_conf'])
+    # bevfusion.to(device)
+    lidarbev = LiDARBEV(grid_conf=lss_cfg['grid_conf'], out_channels=1)
+    lidarbev.to(device)
 
-    i = 0  # np.random.choice(range(len(ds)))
-    sample = ds[i]
-    (imgs, rots, trans, intrins, post_rots, post_trans, points) = sample
+    # get data sample
+    batch = next(iter(loader))
+    batch = [b.to(device) for b in batch]
+    (imgs, rots, trans, intrins, post_rots, post_trans, points) = batch
 
-    # Remove nans saving dimensions
-    points[torch.isnan(points)] = 0
-    assert points.shape[0] == 3
+    # points = points[:, ::20]  # downsample for visualization
+    for _ in range(10):
+        with torch.no_grad():
+            # t0 = time()
+            # voxel_grid = lidarbev.voxelize(points)
+            # # voxel_grid = bevfusion.lidar_bev.voxelize(points)
+            # print('Time to voxelize:', time() - t0)
+            # voxel_grid = voxel_grid.squeeze()
+            # print('Voxel grid shape:', voxel_grid.shape)
 
-    # Filter points
-    mask_x = (points[0] > -6.4) & (points[0] < 6.4)
-    mask_y = (points[1] > -6.4) & (points[1] < 6.4)
-    mask_z = (points[2] > -1.0) & (points[2] < 1.0)
-    mask = mask_x & mask_y & mask_z
-    points = points[:, mask]
-
-    # # Find the minimum point per batch in the point cloud
-    # min_bound = points.min(dim=-1, keepdim=True)[0]  # Shape (3, 1)
-    # assert min_bound.shape == (3, 1)
-    #
-    # # Subtract the minimum point and scale by voxel size
-    # voxel_size = 0.1
-    # grid_size = (64, 128, 128)
-    # shifted_points = (points - min_bound) / voxel_size  # Normalize and scale
-    #
-    # # Floor the points to get voxel indices
-    # grid_indices = torch.floor(shifted_points).long()  # Shape (B, 3, N)
-    #
-    # # Create a batch of voxel grids and mark occupied voxels
-    # voxel_grid = torch.zeros((grid_size), device=points.device, dtype=torch.float32)  # (B, D, H, W)
-    # ids_x = torch.clamp(grid_indices, 0, grid_size[0] - 1)[0, :]
-    # ids_y = torch.clamp(grid_indices, 0, grid_size[1] - 1)[1, :]
-    # ids_z = torch.clamp(grid_indices, 0, grid_size[2] - 1)[2, :]
-    # voxel_grid[ids_x, ids_y, ids_z] = 1.0
-    # print('Voxels grid shape:', voxel_grid.shape)
+            t0 = time()
+            terrain_pred = lidarbev(points)
+            print('Time to predict terrain:', time() - t0)
+            print('Terrain prediction shape:', terrain_pred.shape)
 
     # plot voxels
     fig = plt.figure(figsize=(20, 10))
     # ax = fig.add_subplot(121, projection='3d')
-    # ax.voxels(voxel_grid)
+    # ax.voxels(voxel_grid.permute(1, 2, 0).cpu())
     # set_axes_equal(ax)
+    # ax.view_init(elev=90, azim=0)
+    ax = fig.add_subplot(121)
+    ax.imshow(terrain_pred[0, 0].cpu().numpy().T, cmap='jet', origin='lower')
+    ax.axis('off')
 
-    ax = fig.add_subplot(122, projection='3d')
-    ax.scatter(points[0, ::10], points[1, ::10], points[2, ::10], s=1)
-    set_axes_equal(ax)
+    # ax = fig.add_subplot(122, projection='3d')
+    # ax.scatter(points[0].cpu(), points[1].cpu(), points[2].cpu(), s=1)
+    # # set_axes_equal(ax)
+    # ax.set_xlim(-6.4, 6.4)
+    # ax.set_ylim(-6.4, 6.4)
+    # ax.view_init(elev=90, azim=0)
 
     plt.show()
 

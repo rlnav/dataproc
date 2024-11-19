@@ -18,6 +18,8 @@ except:
     pass
 
 def vis_data(dataset, robot='husky'):
+    from tqdm import tqdm
+
     if robot in ['husky_oru', 'tradr']:
         lss_config_path = f'../../monoforce/monoforce/config/lss_cfg_{robot}.yaml'
     else:
