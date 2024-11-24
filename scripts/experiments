@@ -1,40 +1,4 @@
 #! /usr/bin/env python3
-import os
-import torch
-import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
-from dataproc.cloudproc import filter_grid, hm_to_cloud
-from dataproc.imgproc import denormalize_img
-from dataproc.transformations import transform_cloud
-from dataproc.utils import read_yaml, position, normalize
-from dataproc.vis import draw_coord_frame, draw_coord_frames, set_axes_equal
-import open3d as o3d
-from scipy import interpolate
-from scipy.spatial.transform import Rotation
-from scipy.spatial.transform import Slerp
-from scipy.spatial import cKDTree
-from mayavi import mlab
-from monoforce.datasets import ROUGH
-from monoforce.datasets.rough import rough_seq_paths
-from monoforce.dphys_config import DPhysConfig
-from monoforce.models.dphysics_warp import DiffSim
-from monoforce.models.terrain_encoder.lss import compile_model
-import warp as wp
-from time import time
-
-# set matplotlib backend to show plots in separate window
-plt.switch_backend('Qt5Agg')
-
-monoforce_path = '../../monoforce/monoforce'
-robot = 'marv'
-dphys_cfg = DPhysConfig(robot=robot)
-lss_cfg = read_yaml(os.path.join(monoforce_path, f'config/lss_cfg.yaml'))
-
-
-def load_heightmap(path):
-    heightmap = np.load(path, allow_pickle=True).item()['z']
-    return heightmap
 
 
 def vw_to_track_vel(v, w, r=1.0):
@@ -108,8 +72,7 @@ def visualize_point_cloud_map():
     """
     Visualize point cloud map and trajectory point cloud
     """
-    # paths = rough_seq_paths['husky']
-    paths = rough_seq_paths['husky_oru']
+    paths = rough_seq_paths
 
     for path in paths:
         if not os.path.exists(path):
@@ -718,26 +681,37 @@ def depth_range_image():
 
 
 def merge_heightmaps():
-    from monoforce.cloudproc import merge_heightmaps
+    from monoforce.cloudproc import merge_heightmaps, hm_to_cloud
     from monoforce.transformations import transform_cloud
+    from monoforce.datasets.rough import ROUGH, rough_seq_paths
+    from monoforce.dphys_config import DPhysConfig
+    from monoforce.utils import read_yaml
+    from tqdm import tqdm
+    import numpy as np
+    import open3d as o3d
 
-    ds = ROUGH(path=rough_seq_paths['husky_oru'][0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+    dphys_cfg = DPhysConfig()
+    lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
 
-    n_frames = 100
-    i = np.random.choice(range(len(ds)-n_frames))
+    ds = ROUGH(path=rough_seq_paths[0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+
+    n_frames = 10
+    step = 1
+    # i = np.random.choice(range(len(ds)-n_frames))
+    i = 0
     merged_hm_points = None
     global_hm_cloud = []
-    for i in tqdm(range(i, i+n_frames, 5)):
+    for i in tqdm(range(i, i+n_frames, step)):
         hm = ds.get_geom_height_map(i)
         pose = ds.get_pose(i)
-        hm_points = hm_to_cloud(hm[0], ds.dphys_cfg.d_max, mask=hm[1]).cpu().numpy()
+        hm_points = hm_to_cloud(hm[0], dphys_cfg, mask=hm[1]).cpu().numpy()
         hm_points = transform_cloud(hm_points, pose)
         print('New heightmap points shape:', hm_points.shape)
 
         if merged_hm_points is None:
             merged_hm_points = hm_points
         else:
-            merged_hm_points = merge_heightmaps(hm_points, merged_hm_points, ds.dphys_cfg.grid_res)
+            merged_hm_points = merge_heightmaps(hm_points, merged_hm_points, dphys_cfg.grid_res)
             print('Merged heightmap points shape:', merged_hm_points.shape)
 
         global_hm_cloud.append(hm_points)
@@ -820,8 +794,17 @@ def rough_test():
 
 
 def bevfusion_test():
+    import torch
     from torch.utils.data import DataLoader
-    from monoforce.models.terrain_encoder.bevfusion import BEVFusion, LiDARBEV
+    from time import time
+    import matplotlib.pyplot as plt
+    import numpy as np
+    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
+    from monoforce.models.terrain_encoder.lidarbev import LidarBEV
+    from monoforce.datasets.rough import ROUGH, rough_seq_paths
+    from monoforce.utils import read_yaml, position
+    from monoforce.transformations import transform_cloud
+    from monoforce.dphys_config import DPhysConfig
 
     class Data(ROUGH):
         def __init__(self, path, lss_cfg, dphys_cfg=DPhysConfig(), is_train=True):
@@ -841,13 +824,15 @@ def bevfusion_test():
             return (imgs, rots, trans, intrins, post_rots, post_trans, points)
 
     device = 'cuda'
+    lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
+
     ds = Data(path=rough_seq_paths[0], lss_cfg=lss_cfg)
     loader = DataLoader(ds, batch_size=4, shuffle=False)
     print(f'Dataset length: {len(ds)}')
 
     # bevfusion = BEVFusion(grid_conf=lss_cfg['grid_conf'], data_aug_conf=lss_cfg['data_aug_conf'])
     # bevfusion.to(device)
-    lidarbev = LiDARBEV(grid_conf=lss_cfg['grid_conf'], out_channels=1)
+    lidarbev = LidarBEV(grid_conf=lss_cfg['grid_conf'], outC=1)
     lidarbev.to(device)
 
     # get data sample
@@ -866,9 +851,12 @@ def bevfusion_test():
             # print('Voxel grid shape:', voxel_grid.shape)
 
             t0 = time()
-            terrain_pred = lidarbev(points)
+            out = lidarbev(points)
             print('Time to predict terrain:', time() - t0)
+            terrain_pred = out['terrain']
             print('Terrain prediction shape:', terrain_pred.shape)
+
+            lidar_features = lidarbev.lidar_net(points)
 
     # plot voxels
     fig = plt.figure(figsize=(20, 10))
@@ -876,8 +864,18 @@ def bevfusion_test():
     # ax.voxels(voxel_grid.permute(1, 2, 0).cpu())
     # set_axes_equal(ax)
     # ax.view_init(elev=90, azim=0)
-    ax = fig.add_subplot(121)
-    ax.imshow(terrain_pred[0, 0].cpu().numpy().T, cmap='jet', origin='lower')
+
+    ax = fig.add_subplot(131)
+    ax.imshow(terrain_pred[0, 0].cpu().numpy(), cmap='jet', origin='lower')
+    ax.axis('off')
+
+    ax = fig.add_subplot(132)
+    ax.imshow(lidar_features[0, 0].cpu().numpy(), cmap='jet', origin='lower')
+    ax.axis('off')
+
+    ax = fig.add_subplot(133)
+    terrain_height = ds.get_terrain_height_map(0)[0]
+    ax.imshow(terrain_height.cpu().numpy(), cmap='jet', origin='lower')
     ax.axis('off')
 
     # ax = fig.add_subplot(122, projection='3d')
@@ -945,6 +943,76 @@ def gridmap_interpolation():
     mlab.show()
 
 
+def merge_heightmaps1():
+    from monoforce.cloudproc import merge_heightmaps, hm_to_cloud
+    from monoforce.transformations import position, transform_cloud
+    from monoforce.datasets.rough import ROUGH, rough_seq_paths
+    from monoforce.dphys_config import DPhysConfig
+    from monoforce.utils import read_yaml
+    from tqdm import tqdm
+    import numpy as np
+    import open3d as o3d
+    from scipy.spatial.transform import Rotation
+
+    dphys_cfg = DPhysConfig()
+    lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
+
+    ds = ROUGH(path=rough_seq_paths[0], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
+
+    def gravity_aligned_pose(pose):
+        R = pose[:3, :3]
+        roll, pitch, yaw = Rotation.from_matrix(R).as_euler('xyz')
+        R_yaw = Rotation.from_euler(angles=[0., 0., yaw], seq='xyz').as_matrix()
+        pose[:3, :3] = R_yaw
+        return pose
+
+    def get_points(i):
+        points = position(ds.get_cloud(i))
+        pose = ds.get_pose(i)
+        # pose = gravity_aligned_pose(pose)
+        points = transform_cloud(points, pose)
+        return points
+
+    def get_hm_poinst(i):
+        hm = ds.get_geom_height_map(i)
+        pose = ds.get_pose(i)
+        # pose = gravity_aligned_pose(pose)
+        hm_points = hm_to_cloud(hm[0], dphys_cfg, mask=hm[1]).cpu().numpy()
+        hm_points = transform_cloud(hm_points, pose)
+        return hm_points
+
+    step = 5
+    i = 436
+    # i = np.random.choice(range(len(ds)-step))
+    print(i)
+
+    points1 = get_hm_poinst(i)
+    pose1 = ds.get_pose(i)
+    # points1 = get_points(i)
+
+    j = i + step
+    points2 = get_hm_poinst(j)
+    pose2 = ds.get_pose(j)
+    # points2 = get_points(j)
+
+    pcd1 = o3d.geometry.PointCloud()
+    pcd1.points = o3d.utility.Vector3dVector(points1)
+    pcd1.paint_uniform_color([1, 0, 0])
+
+    pcd2 = o3d.geometry.PointCloud()
+    pcd2.points = o3d.utility.Vector3dVector(points2)
+    pcd2.paint_uniform_color([0, 0, 1])
+
+    cf1 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0.0, 0.0, 0.0])
+    cf1.transform(pose1)
+
+    cf2 = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0, origin=[0.0, 0.0, 0.0])
+    cf2.transform(pose2)
+
+    o3d.visualization.draw_geometries([pcd1, pcd2, cf1, cf2])
+
+
+
 def main():
     # data_slicing()
     # visualize_point_cloud_map()
@@ -965,8 +1033,9 @@ def main():
     # merge_heightmaps()
     # radar_lidar_clouds()
     # rough_test()
-    # bevfusion_test()
-    gridmap_interpolation()
+    bevfusion_test()
+    # gridmap_interpolation()
+    # merge_heightmaps1()
 
 
 if __name__ == '__main__':
