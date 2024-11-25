@@ -256,83 +256,6 @@ def vis_data():
 
         plt.show()
 
-
-def segmentation_demo():
-    from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
-    from monoforce.datasets.coco import COCO_CATEGORIES
-
-    void_id = 133
-    coco_classes = [i['name'].replace('-merged', '').replace('-other', '') for i in COCO_CATEGORIES] + ['void']
-    coco_colors = [(np.array(color['color']) / 255).tolist() for color in COCO_CATEGORIES] + [[0., 0., 0.]]
-    # selected_classes = ['person', 'tree', 'building']
-    selected_classes = np.copy(coco_classes)
-    # selected_classes = ['person']
-
-    path = rough_seq_paths['tradr'][2]
-
-    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
-    # sample_i = np.random.choice(range(len(ds)))
-    sample_i = 0
-
-    lidar_points = position(ds.get_cloud(sample_i))
-    points = []
-    colors = []
-    n_cams = len(ds.camera_names)
-    plt.figure(figsize=(n_cams * 5, 5))
-    plt.axis('off')
-    for cam_i in range(n_cams):
-        cam = ds.camera_names[cam_i]
-        rgb, K = ds.get_image(sample_i, camera=cam)
-
-        seg_label_cam = ds.get_seg_label(sample_i, camera=cam)
-        rgb = np.asarray(rgb) / 255.
-        seg_label_cam = np.asarray(seg_label_cam)
-        # transform segmentation labels to colors
-        seg_color_cam = np.zeros(rgb.shape, dtype=np.float32)
-        rgb_seg = np.copy(rgb)
-        for color_i, color in enumerate(coco_colors):
-            if coco_classes[color_i] not in selected_classes:
-                continue
-            # print(f'Colorizing {coco_classes[color_i]} with {color}')
-            seg_color_cam[seg_label_cam == color_i] = color
-        rgb_seg[seg_label_cam != void_id] = normalize(seg_color_cam + rgb)[seg_label_cam != void_id]
-
-        E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
-        E = np.asarray(E, dtype=np.float32).reshape((4, 4))
-
-        lidar_points = torch.as_tensor(lidar_points)
-        E = torch.as_tensor(E)
-        K = torch.as_tensor(K)
-
-        cam_points = ego_to_cam(lidar_points.T, E[:3, :3], E[:3, 3], K).T
-        mask = get_only_in_img_mask(cam_points.T, rgb.shape[0], rgb.shape[1])
-        cam_points = cam_points[mask]
-        # print('Points in image:', cam_points.shape)
-
-        # colorize point cloud with values from segmentation image
-        uv = cam_points[:, :2].numpy().astype(int)
-        seg_colors = seg_color_cam[uv[:, 1], uv[:, 0]]
-
-        points.append(lidar_points[mask].numpy())
-        colors.append(seg_colors)
-
-        # visualize
-        plt.subplot(1, len(ds.camera_names), cam_i + 1)
-        plt.imshow(rgb_seg)
-        # plt.scatter(cam_points[:, 0], cam_points[:, 1], s=1, c=lidar_points[mask, 2],
-        #             cmap='jet', alpha=0.2, vmin=-1, vmax=1)
-
-    # plt.savefig('segmentation_demo.png')
-    plt.show()
-
-    points = np.vstack(points)
-    colors = np.vstack(colors)
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(points)
-    pcd.colors = o3d.utility.Vector3dVector(colors)
-    o3d.visualization.draw_geometries([pcd])
-
-
 def semantic_heightmap():
     from monoforce.datasets import ROUGH
     from monoforce.config import DPhysConfig
@@ -799,12 +722,12 @@ def bevfusion_test():
     from time import time
     import matplotlib.pyplot as plt
     import numpy as np
-    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
-    from monoforce.models.terrain_encoder.lidarbev import LidarBEV
     from monoforce.datasets.rough import ROUGH, rough_seq_paths
     from monoforce.utils import read_yaml, position
     from monoforce.transformations import transform_cloud
     from monoforce.dphys_config import DPhysConfig
+    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
+    from monoforce.models.terrain_encoder.lidarbev import LidarBEV
 
     class Data(ROUGH):
         def __init__(self, path, lss_cfg, dphys_cfg=DPhysConfig(), is_train=True):
@@ -827,7 +750,7 @@ def bevfusion_test():
     lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
 
     ds = Data(path=rough_seq_paths[0], lss_cfg=lss_cfg)
-    loader = DataLoader(ds, batch_size=4, shuffle=False)
+    loader = DataLoader(ds, batch_size=1, shuffle=False)
     print(f'Dataset length: {len(ds)}')
 
     # bevfusion = BEVFusion(grid_conf=lss_cfg['grid_conf'], data_aug_conf=lss_cfg['data_aug_conf'])
@@ -839,21 +762,23 @@ def bevfusion_test():
     batch = next(iter(loader))
     batch = [b.to(device) for b in batch]
     (imgs, rots, trans, intrins, post_rots, post_trans, points) = batch
+    imgs_input = batch[:6]
+    points = points[..., ::100]  # downsample for visualization
 
-    # points = points[:, ::20]  # downsample for visualization
-    for _ in range(10):
-        with torch.no_grad():
-            # t0 = time()
-            # voxel_grid = lidarbev.voxelize(points)
-            # # voxel_grid = bevfusion.lidar_bev.voxelize(points)
-            # print('Time to voxelize:', time() - t0)
-            # voxel_grid = voxel_grid.squeeze()
-            # print('Voxel grid shape:', voxel_grid.shape)
-
+    with torch.no_grad():
+        for _ in range(5):
             t0 = time()
+            voxel_grid = lidarbev.lidar_net.voxelize(points)
+            # voxel_grid = bevfusion.lidar_net.voxelize(points)
+            print('Time to voxelize:', time() - t0)
+            print('Voxel grid shape:', voxel_grid.shape)
+
+        for _ in range(5):
+            t1 = time()
             out = lidarbev(points)
-            print('Time to predict terrain:', time() - t0)
+            # out = bevfusion(imgs_input, points)
             terrain_pred = out['terrain']
+            print('Time to predict terrain:', time() - t1)
             print('Terrain prediction shape:', terrain_pred.shape)
 
             lidar_features = lidarbev.lidar_net(points)
@@ -876,10 +801,18 @@ def bevfusion_test():
     ax = fig.add_subplot(133)
     terrain_height = ds.get_terrain_height_map(0)[0]
     ax.imshow(terrain_height.cpu().numpy(), cmap='jet', origin='lower')
-    ax.axis('off')
 
-    # ax = fig.add_subplot(122, projection='3d')
-    # ax.scatter(points[0].cpu(), points[1].cpu(), points[2].cpu(), s=1)
+    # ax = fig.add_subplot(131, projection='3d')
+    # ax.voxels(voxel_grid[0, 0].permute(1, 2, 0).cpu())
+    # set_axes_equal(ax)
+    # ax.view_init(elev=90, azim=0)
+    #
+    # ax = fig.add_subplot(132)
+    # ax.imshow(terrain_pred[0, 0].cpu().numpy(), cmap='jet', origin='lower', vmin=-1, vmax=1)
+    # ax.axis('off')
+    #
+    # ax = fig.add_subplot(133, projection='3d')
+    # ax.scatter(points[0, 0].cpu(), points[0, 1].cpu(), points[0, 2].cpu(), s=1)
     # # set_axes_equal(ax)
     # ax.set_xlim(-6.4, 6.4)
     # ax.set_ylim(-6.4, 6.4)
@@ -1022,7 +955,6 @@ def main():
     # vis_trajectory()
     # sample_heightmap_at_img_pose()
     # vis_data()
-    # segmentation_demo()
     # semantic_heightmap()
     # cloud_to_mesh()
     # data_test()

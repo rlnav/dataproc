@@ -17,7 +17,7 @@ except:
         print('Cannot set matplotlib backend')
     pass
 
-def vis_data(dataset, robot='husky'):
+def vis_data(robot='husky'):
     from tqdm import tqdm
 
     if robot in ['husky_oru', 'tradr']:
@@ -30,19 +30,16 @@ def vis_data(dataset, robot='husky'):
         lss_config = read_yaml(lss_config_path)
         dphys_cfg = DPhysConfig(robot=robot)
         ds = ROUGH(path, is_train=False, lss_cfg=lss_config, dphys_cfg=dphys_cfg)
-        ds = ds[np.random.choice(len(ds), 32, replace=False)]
-        explore_data(ds, sample_range='random', save=False)
+        # ds = ds[np.random.choice(len(ds), 32, replace=False)]
+        # explore_data(ds, sample_range='random', save=False)
+        for sample in tqdm(ds):
+            pass
 
 
 def visualize():
-    datasets = ['rough']
-    robots = ['marv']
-    for dataset in datasets:
-        for robot in robots:
-            vis_data(dataset, robot)
-            if dataset == 'rellis3d':
-                print('Rellis3D does not have multiple robots')
-                break
+    robots = ['marv', 'tradr2']
+    for robot in robots:
+        vis_data(robot)
 
 def main():
     visualize()

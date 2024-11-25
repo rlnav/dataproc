@@ -5,11 +5,11 @@ import numpy as np
 import torch
 import rospy
 from numpy.lib.recfunctions import unstructured_to_structured
-from monoforce.datasets import RobinGasVis, robingas_seq_paths
+from monoforce.datasets import ROUGH, rough_seq_paths
 from monoforce.dphys_config import DPhysConfig
 from monoforce.models.dphysics import DPhysics, vw_to_tracks_vel
 from monoforce.ros import height_map_to_gridmap_msg, poses_to_path, to_tf, xyz_to_point
-from monoforce.models.terrain_encoder.lss import load_lss_model
+from monoforce.models.terrain_encoder.lss import LiftSplatShoot
 from nav_msgs.msg import Path
 from sensor_msgs.msg import PointCloud2, Image, CameraInfo
 from grid_map_msgs.msg import GridMap
@@ -33,8 +33,8 @@ class MonoForce:
         self.robot = robot
 
         self.lib_path = rospkg.RosPack().get_path('monoforce').replace('monoforce_ros', 'monoforce')
-        # self.data_seq = np.random.choice(robingas_seq_paths[self.robot])
-        self.data_seq = robingas_seq_paths[self.robot][2]
+        # self.data_seq = np.random.choice(rough_seq_paths)
+        self.data_seq = rough_seq_paths[2]
         if not os.path.isdir(self.data_seq):
             rospy.loginfo('Data sequence for robot %s does not exist. Using sample data.' % self.robot)
             self.data_seq = os.path.join(self.lib_path, 'config/data_sample', self.robot)
@@ -55,7 +55,9 @@ class MonoForce:
         self.robot_frame = robot_frame
         self.camera_frames = None  # will be set from the data sequence
         # load terrain encoder
-        self.terrain_encoder = load_lss_model(modelf=lss_weights_path, lss_cfg=self.lss_config, device=self.device)
+        self.terrain_encoder = LiftSplatShoot(self.lss_config['grid_conf'],
+                                              self.lss_config['data_aug_conf']).from_pretrained(lss_weights_path)
+        self.terrain_encoder.to(self.device)
         self.terrain_encoder.eval()
 
         # publishers
