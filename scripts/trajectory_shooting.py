@@ -12,7 +12,7 @@ mpl.use('Qt5Agg')
 def shoot_multiple():
     # simulation parameters
     dphys_cfg = DPhysConfig()
-    dphys_cfg.n_sim_trajs = 128
+    dphys_cfg.n_sim_trajs = 1024
     dt = dphys_cfg.dt
     T = dphys_cfg.traj_sim_time
     num_trajs = dphys_cfg.n_sim_trajs

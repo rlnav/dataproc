@@ -26,7 +26,7 @@ def points_alignment():
 
     # crop the point cloud to the region of interest
     cfg = DPhysConfig()
-    grid_res, d_max, h_max = cfg.grid_res, cfg.d_max, cfg.h_max_above_ground
+    grid_res, d_max, h_max = cfg.grid_res, cfg.d_max, cfg.h_max
     mask = ((points[:, 0] > -d_max) & (points[:, 0] < d_max) &
             (points[:, 1] > -d_max) & (points[:, 1] < d_max) &
             (points[:, 2] > -h_max) & (points[:, 2] < h_max) )
@@ -52,16 +52,15 @@ def heightmap():
 
     # crop the point cloud to the region of interest
     cfg = DPhysConfig()
-    grid_res, d_max, h_max = cfg.grid_res, cfg.d_max, cfg.h_max_above_ground
+    grid_res, d_max, h_max = cfg.grid_res, cfg.d_max, cfg.h_max
 
     for _ in range(1):
         i = 294
         # i = np.random.choice(len(ds))
         points = torch.from_numpy(position(ds.get_cloud(i)))  # in robot-centric frame: base_link
-        pose = ds.get_pose(i)
 
         t0 = time()
-        hm = estimate_heightmap(points=points, grid_res=grid_res, d_max=d_max, h_max=h_max, r_min=1, map_pose=pose)
+        hm = estimate_heightmap(points=points, grid_res=grid_res, d_max=d_max, h_max=h_max, r_min=1)
         print(f'Estimating heightmap took: {time() - t0} [sec]')
         heightmap, measured_mask = hm[0], hm[1]
 
