@@ -4,9 +4,8 @@ import numpy as np
 import open3d as o3d
 import torch
 import matplotlib.pyplot as plt
-from scipy.spatial.transform import Rotation
 from monoforce.datasets import ROUGH, rough_seq_paths
-from monoforce.transformations import position, transform_cloud
+from monoforce.transformations import position
 from monoforce.dphys_config import DPhysConfig
 from monoforce.cloudproc import estimate_heightmap
 import matplotlib as mpl

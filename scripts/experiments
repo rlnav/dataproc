@@ -386,74 +386,6 @@ def fov_masking():
     plt.show()
 
 
-def dphys():
-    from monoforce.models.dphysics import dphysics, State
-
-    tt = torch.linspace(0., dphys_cfg.traj_sim_time, dphys_cfg.n_samples)
-    device = 'cuda'
-    pose_step = 100
-
-    # H, W = int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res), int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res)
-    # height = np.zeros((H, W), dtype=np.float32)
-    # height[H // 3 * 2:, :] = 1.0
-
-    # # gaussian hm
-    x = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res))
-    y = np.linspace(-dphys_cfg.d_max, dphys_cfg.d_max, int(dphys_cfg.d_max * 2 / dphys_cfg.grid_res))
-    X, Y = np.meshgrid(x, y)
-    height = (1.0 * np.exp(-1.0 * ((X - 0) ** 2 + (Y - 4) ** 2)) +
-              4.0 * np.exp(-5.0 * ((X - 1) ** 2 + (Y + 2) ** 2)) +
-              2.0 * np.exp(-3.0 * ((X + 2) ** 2 + (Y + 4) ** 2))
-              ) / 3.0
-    height = np.asarray(height, dtype=np.float32)
-
-    # initialize robot state
-    # yaw = np.random.random()-0.5
-    yaw = 0.
-    state0 = State(xyz=torch.tensor([0., 0., 0.], device=device).view(3, 1),
-                   rot=torch.as_tensor(Rotation.from_euler('z', yaw).as_matrix(),
-                                       dtype=torch.float32, device=device).view(3, 3),
-                   vel=torch.tensor([0., 0., 0.], device=device).view(3, 1),
-                   omega=torch.tensor([0., 0., 0.], device=device).view(3, 1),
-                   device=device)
-
-    # controls
-    ws = np.arange(-0.3, 0.4, 0.1).tolist() + np.arange(-0.3, 0.4, 0.1).tolist()
-    vs = (0.5 * np.ones(len(ws) // 2)).tolist() + (-0.5 * np.ones(int(len(ws) // 2))).tolist()
-    trajs = []
-    for v, w in zip(vs, ws):
-        vv = v * torch.ones(dphys_cfg.n_samples)
-        ww = w * torch.ones(dphys_cfg.n_samples)
-        controls = {'stamps': tt, 'linear_v': vv, 'angular_w': ww}
-
-        # predict states
-        with torch.no_grad():
-            states, _ = dphysics(height, controls, robot_model=robot, state=state0, dphys_cfg=dphys_cfg, device=device)
-
-            # get translation and rotation matrices
-            xyz = states[0][::pose_step].cpu().numpy()
-            Rs = states[1][::pose_step].cpu().numpy()
-            print('xyz:', xyz.shape)
-            print('Rs:', Rs.shape)
-            traj = np.zeros((len(xyz), 4, 4))
-            traj[:, :3, :3] = Rs
-            traj[:, :3, 3:4] = xyz
-            traj[:, 3, 3] = 1.
-            trajs.append(traj)
-
-    # show height map as a surface and best trajectory in 3D
-    fig = plt.figure(figsize=(10, 10))
-    ax = fig.add_subplot(111, projection='3d')
-    ax.plot_surface(X, Y, height.T, cmap='jet', alpha=0.4)
-    # plot trajectoryies
-    for traj in trajs:
-        ax.plot(traj[:, 0, 3], traj[:, 1, 3], traj[:, 2, 3], 'b', linewidth=1)
-    set_axes_equal(ax)
-    ax.set_xlabel('X')
-    ax.set_ylabel('Y')
-    ax.set_zlabel('Z')
-    plt.show()
-
 def warp_dphys():
     wp.init()
 
@@ -820,62 +752,6 @@ def bevfusion_test():
 
     plt.show()
 
-
-def gridmap_interpolation():
-    from monoforce.models.dphysics import DPhysics
-    from monoforce.dphys_config import DPhysConfig
-    from mayavi import mlab
-    import torch
-    import os
-
-    # robot point cloud
-    robot = 'tradr'
-    dphys_cfg = DPhysConfig(robot=robot)
-    dphysics = DPhysics(dphys_cfg=dphys_cfg)
-    points0 = dphys_cfg.robot_points[::5]
-    points0 += torch.tensor([0, 0, 2.0])
-    points0 = points0.unsqueeze(0)  # add batch dimension
-
-    # heightmap defining the terrain
-    x_grid = torch.arange(-dphys_cfg.d_max, dphys_cfg.d_max, dphys_cfg.grid_res)
-    y_grid = torch.arange(-dphys_cfg.d_max, dphys_cfg.d_max, dphys_cfg.grid_res)
-    x_grid, y_grid = torch.meshgrid(x_grid, y_grid)
-    # z_grid = torch.sin(x_grid) * torch.cos(y_grid)
-    z_grid = torch.exp(-(x_grid - 2) ** 2 / 4) * torch.exp(-(y_grid - 0) ** 2 / 2)
-    # z_grid = torch.zeros_like(x_grid)
-    z_grid += torch.rand(z_grid.shape) * 0.3
-    z_grid = z_grid.unsqueeze(0)  # add batch dimension
-
-    mlab.figure(bgcolor=(1, 1, 1), size=(800, 800))
-    mlab.surf(x_grid.numpy(), y_grid.numpy(), z_grid[0].numpy(), colormap='jet', opacity=0.7)
-
-    visu_pts = mlab.points3d(points0[0, :, 0], points0[0, :, 1], points0[0, :, 2],
-                             scale_factor=0.05, color=(0, 0, 1))
-    visu_proj_pts = mlab.points3d(points0[0, :, 0], points0[0, :, 1], points0[0, :, 2],
-                                  scale_factor=0.05, color=(1, 0, 0))
-    visu_normals = mlab.quiver3d(points0[0, :, 0].numpy(), points0[0, :, 1].numpy(), points0[0, :, 2].numpy(),
-                                 points0[0, :, 0].numpy(), points0[0, :, 1].numpy(), points0[0, :, 2].numpy(),
-                                 scale_factor=1.0, color=(0, 1, 0))
-
-    for x in torch.arange(-10.0, 10.0, 0.1):
-        points = points0 + torch.tensor([x, x, 0]).view(1, 1, 3)
-
-        z_points, normals = dphysics.interpolate_grid(z_grid, points[..., 0], points[..., 1], return_normals=True)
-        points_grid = points.clone()
-        points_grid[..., 2] = z_points
-
-        # update plot
-        visu_pts.mlab_source.set(x=points[0, :, 0].numpy(), y=points[0, :, 1].numpy(), z=points[0, :, 2].numpy())
-        visu_proj_pts.mlab_source.set(x=points_grid[0, :, 0].numpy(), y=points_grid[0, :, 1].numpy(), z=points_grid[0, :, 2].numpy())
-        visu_normals.mlab_source.set(x=points_grid[0, :, 0].numpy(), y=points_grid[0, :, 1].numpy(), z=points_grid[0, :, 2].numpy(),
-                                     u=normals[0, :, 0].numpy(), v=normals[0, :, 1].numpy(), w=normals[0, :, 2].numpy())
-
-        os.makedirs('gen', exist_ok=True)
-        mlab.savefig(f'gen/{x}.png')
-
-    mlab.show()
-
-
 def merge_heightmaps1():
     from monoforce.cloudproc import merge_heightmaps, hm_to_cloud
     from monoforce.transformations import position, transform_cloud
@@ -965,9 +841,8 @@ def main():
     # merge_heightmaps()
     # radar_lidar_clouds()
     # rough_test()
-    bevfusion_test()
-    # gridmap_interpolation()
-    # merge_heightmaps1()
+    # bevfusion_test()
+    merge_heightmaps1()
 
 
 if __name__ == '__main__':
