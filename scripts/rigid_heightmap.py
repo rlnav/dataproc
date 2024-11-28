@@ -87,7 +87,7 @@ def rough_test():
 
 
 def main():
-    # segmentation_test()
+    segmentation_test()
     rough_test()
 
 

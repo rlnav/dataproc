@@ -4,6 +4,7 @@
 #DATA_PATH=/media/ruslan/data/datasets
 DATA_PATH=/home/ruslan/Desktop/outdoor_dataset/
 
+#SEQUENCES=($(ls $DATA_PATH))
 SEQUENCES=(
             '24-10-05-pokor-petrin/marv_2024-10-05-12-34-53'
             '24-10-05-pokor-petrin/marv_2024-10-05-12-35-00'
