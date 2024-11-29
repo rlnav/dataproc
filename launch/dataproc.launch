@@ -22,7 +22,7 @@
 <!--     </node> -->
 
     <!-- Data Processor -->
-    <node pkg="dataproc" type="dataproc" name="dataproc" output="screen">
+    <node pkg="dataproc" type="save_imgs_clouds" name="save_imgs_clouds" output="screen">
         <rosparam subst_value="true">
             robot_frame: $(arg robot_frame)
             img_topics: $(arg img_topics)

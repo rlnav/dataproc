@@ -7,15 +7,14 @@ import numpy as np
 import torch
 import rospy
 from cv_bridge import CvBridge
-from dataproc.io import append_to_csv, write_to_csv
 from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
-from dataproc.transformations import transform_cloud
+from dataproc.transformations import transform_cloud, position
 from dataproc.ros import write_intrinsics_to_yaml, append_tf_to_yaml
 from sensor_msgs.msg import CompressedImage, PointCloud2, CameraInfo
 from time import time
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 import tf2_ros
-from ros_numpy import numpify
+from ros_numpy import numpify, msgify
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 
@@ -26,12 +25,10 @@ class DataProc:
                  camera_info_topics=[],
                  lidar_topic='/points',
                  robot_frame='base_link',
-                 map_frame='map',
                  max_msgs_delay=0.1,
                  output_path='',
                  save_time_period=1.0,
                  ):
-        self.map_frame = map_frame
         self.robot_frame = robot_frame
         self.lidar_frame = None
         self.camera_frames = []
@@ -122,17 +119,6 @@ class DataProc:
 
         return imgs, Ks, Es, lidar_cloud, stamp
 
-    def get_map_pose(self, frame, stamp=None):
-        if stamp is None:
-            stamp = rospy.Time(0)
-        try:
-            tf = self.tf_buffer.lookup_transform(self.map_frame, frame, stamp, rospy.Duration(1.0))
-        except Exception as ex:
-            rospy.logerr('Could not transform from %s to %s: %s.', frame, self.map_frame, ex)
-            return None
-        pose = np.array(numpify(tf.transform), dtype=np.float32).reshape((4, 4))
-        return pose
-
     def callback(self, *msgs):
         with self.proc_lock:
             rospy.logdebug('Received %d messages' % len(msgs))
@@ -144,10 +130,10 @@ class DataProc:
             rospy.logdebug('Processing time: %.3f [sec]' % (time() - t0))
             self.rate.sleep()
 
-    def draw_points_in_images(self, imgs, Ks, Es, points, output_file='points.png'):
+    def draw_points_in_images(self, imgs, Ks, Es, points):
         try:
             stamp = rospy.Time(0)
-            timeout = rospy.Duration.from_sec(1.0)
+            timeout = rospy.Duration.from_sec(self.max_msgs_delay)
             tf = self.tf_buffer.lookup_transform(self.robot_frame, self.lidar_frame, stamp, timeout)
         except Exception as ex:
             rospy.logerr('Could not transform from camera %s to robot %s: %s.',
@@ -178,18 +164,15 @@ class DataProc:
             plt.scatter(ego_pts[0, mask], ego_pts[1, mask], c=points[2, mask],
                         s=1, alpha=0.2, cmap='jet', vmin=-1, vmax=1)
             plt.axis('off')
-        plt.savefig(output_file)
+        plt.savefig(os.path.join(self.output_path, 'points.png'))
         plt.close(fig)
 
-    def save_data(self, imgs, info_msgs, lidar_cloud, map_pose, stamp):
+    def save_data(self, imgs, info_msgs, lidar_cloud, stamp):
         assert len(imgs) == len(info_msgs)
         assert imgs.shape[0] == len(self.img_topics)
-        assert isinstance(map_pose, np.ndarray) and map_pose.shape == (4, 4)
 
         cloud_path = os.path.join(self.output_path, 'clouds')
         img_path = os.path.join(self.output_path, 'images')
-        poses_path = os.path.join(self.output_path, 'poses')
-        poses_csv = os.path.join(poses_path, 'lidar_poses.csv')
         calib_path = os.path.join(self.output_path, 'calibration')
 
         if not os.path.exists(calib_path):
@@ -228,11 +211,6 @@ class DataProc:
         for i, img in enumerate(imgs):
             cv2.imwrite(os.path.join(img_path, id + '_%s.png' % camera_names[i]), img)
 
-        # save poses to csv
-        if not os.path.exists(poses_csv):
-            write_to_csv(poses_csv, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
-        append_to_csv(poses_csv, '%.9f, %s\n' % (t, ', '.join(['%.3f' % x for x in map_pose[:3, :].flatten()])))
-
     def proc(self, *msgs):
         n = len(msgs)
         assert n % 2 == 1, 'Number of messages must be odd'
@@ -253,14 +231,12 @@ class DataProc:
         rospy.logdebug('Es shape: %s' % str(Es.shape))
         rospy.logdebug('lidar cloud shape: %s' % str(lidar_cloud.shape))
 
-        # self.draw_points_in_images(imgs, Ks, Es, position(lidar_cloud))
-        lidar_pose = self.get_map_pose(frame=self.lidar_frame, stamp=stamp)
-
         # save data
-        if lidar_pose is None:
-            return
         rospy.loginfo('Saving data sample to %s' % self.output_path)
-        self.save_data(imgs, info_msgs, lidar_cloud, lidar_pose, stamp)
+        self.save_data(imgs, info_msgs, lidar_cloud, stamp)
+
+        # # debug
+        # self.draw_points_in_images(imgs, Ks, Es, position(lidar_cloud))
 
     def spin(self):
         try:
@@ -282,8 +258,10 @@ def main():
 
     node = DataProc(img_topics=img_topics, camera_info_topics=camera_info_topics,
                     lidar_topic=lidar_topic,
-                    robot_frame=robot_frame, max_msgs_delay=max_msgs_delay,
-                    output_path=output_path, save_time_period=save_time_period)
+                    robot_frame=robot_frame,
+                    max_msgs_delay=max_msgs_delay,
+                    output_path=output_path,
+                    save_time_period=save_time_period)
     node.start()
     node.spin()
 

@@ -1,0 +1,106 @@
+#!/usr/bin/env python
+
+import sys
+sys.path.append('../src')
+import os
+from rosbag import Bag, ROSBagException, Compression
+from tqdm import tqdm
+from dataproc.io import write_to_csv, append_to_csv
+from tf2_ros import BufferCore, TransformException
+from ros_numpy import numpify, msgify
+import rospy
+
+
+def load_buffer(bag_paths):
+    tf_topics = ['/tf', '/tf_static']
+    # buffer = BufferCore(cache_time=rospy.Duration(2**31 - 1))
+    # buffer = BufferCore(cache_time=rospy.Duration(24 * 60 * 60))
+    buffer = BufferCore(rospy.Duration(24 * 60 * 60))
+    for path in bag_paths:
+        try:
+            with Bag(path, 'r') as bag:
+                for topic, msg, stamp in tqdm(bag.read_messages(topics=tf_topics),
+                                              desc='%s: reading transforms' % path.split('/')[-1],
+                                              total=bag.get_message_count(topic_filters=tf_topics)):
+                    if topic == '/tf':
+                        for tf in msg.transforms:
+                            buffer.set_transform(tf, 'bag')
+                    elif topic == '/tf_static':
+                        for tf in msg.transforms:
+                            buffer.set_transform_static(tf, 'bag')
+        except ROSBagException as ex:
+            print('Could not read %s: %s' % (path, ex))
+
+    return buffer
+
+def get_pose(buffer, msg, fixed_frame):
+    # Find transform from input cloud to fixed frame.
+    try:
+        input_to_fixed = buffer.lookup_transform_core(fixed_frame, msg.header.frame_id, msg.header.stamp)
+    except TransformException as ex:
+        print('Could not transform from %s to %s at %.3f s.' % (
+               msg.header.frame_id, fixed_frame, msg.header.stamp.to_sec()))
+        return None
+    input_to_fixed = numpify(input_to_fixed.transform)
+    return input_to_fixed
+
+def process_bag(bag_path, poses_path, lidar_topic, fixed_frame='map'):
+    write_to_csv(poses_path, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
+    buffer = load_buffer([bag_path])
+
+    with Bag(bag_path) as bag:
+        for topic, msg, stamp in tqdm(bag.read_messages(topics=[lidar_topic]),
+                                      total=bag.get_message_count(lidar_topic)):
+            lidar_pose = get_pose(buffer, msg, fixed_frame)
+            t = stamp.to_sec()
+            if lidar_pose is not None:
+                append_to_csv(poses_path, '%.9f, %s\n' % (t, ', '.join(['%.3f' % x for x in lidar_pose[:3, :].flatten()])))
+
+
+
+def main():
+    bag_paths = [
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-46-51.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-54-43.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-12-34-53.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-01-40.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-17-08.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-29-39.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-43-21.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-57-57.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-14-12-29.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-14-22-10.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-14-28-15.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-16-42.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-26-47.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-35-05.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-56-33.bag',
+
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-02-31.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-12-12.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-54-18.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-58-52.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-08-30.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-24-48.bag',
+    ]
+    for path_i, bag_path in enumerate(bag_paths):
+        assert os.path.exists(bag_path), f'Path {bag_path} does not exist'
+        data_path = os.path.basename(bag_path.replace('.bag', ''))
+        data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH-v2/', data_path)
+        poses_path = os.path.join(data_path, 'poses', 'lidar_poses_all.csv')
+        print(f'Writing lidar poses to {poses_path}')
+        lidar_topic = '/points_filtered_kontron'
+
+        process_bag(bag_path, poses_path, lidar_topic)
+    print('Done')
+
+
+if __name__ == '__main__':
+    main()

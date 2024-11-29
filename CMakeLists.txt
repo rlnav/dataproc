@@ -10,10 +10,11 @@ catkin_package()
 include_directories()
 
 catkin_install_python(PROGRAMS
-  nodes/dataproc
+  nodes/save_imgs_clouds
   nodes/play_tf_static
   nodes/cloud_proc
   nodes/gridmap_masker
+  nodes/monoforce_demo
   DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
 )
 

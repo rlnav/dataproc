@@ -1,24 +1,39 @@
-# Data Proc
+# Data Processing
 
-## Data generation
+Data processing tools from bag files to data sequences.
+The dataset is used to train
+[MonoForce](https://github.com/ctu-vras/monoforce) traversability estimation models.
 
-The bag files are available at [http://subtdata.felk.cvut.cz/robingas/data/](http://subtdata.felk.cvut.cz/robingas/data/).
-In order to generate the traversability data from a prerecorded bag file, please run
-(*note, that the topic names could be different depending on a bag file):
+## Usage
 
-```commandline
-cd ./scripts/data/
-./create_dataset --bag-paths /path/to/data/sequence/<sequence-name>.bag \
-                               /path/to/data/sequence/<sequence-name>_loc.bag \
-                               --cloud-topics /os_cloud_node/destaggered_points \
-                               --camera-topics /camera_rear/image_color/compressed \
-                                               /camera_front/image_color/compressed \
-                                               /camera_right/image_color/compressed \
-                                               /camera_left/image_color/compressed \
-                               --camera-info-topics /camera_front/camera_info \
-                                                    /camera_rear/camera_info \
-                                                    /camera_right/camera_info \
-                                                    /camera_left/camera_info \
-                               --robot-model 'Box()' --discard-model 'Box()' \
-                               --input-step 50 --visualize False --save-data True
-```
+Make sure to adjust the paths and data topics.
+
+- To save lidar clouds, corresponding camera images, and calibration (extrinsics and intrinsics) from a bag file:
+    ```commandline
+    OUTPUT_PATH=/path/to/save/data/sequence
+    roslaunch dataproc dataproc.launch output_path:=${OUTPUT_PATH} img_topics:=[] lidar_topics:=[] camera_info_topics:=[]
+    ```
+
+- To save control inputs:
+    ```commandline
+    cd ./scripts/
+    ./add_controls
+    ```
+
+- RGB data anonymization using the [Deface](https://github.com/ORB-HD/deface) package:
+    ```commandline
+    cd ./scripts/
+    ./blur_faces.sh
+    ```
+
+- Save semantic pseudo labels using the [SEEM](https://github.com/UX-Decoder/Segment-Everything-Everywhere-All-At-Once) model:
+    ```commandline
+    cd ./scripts/
+    ./save_semantic_pseudolabels.sh
+    ```
+  
+- Save localization (lidar poses). The [norlab-cip-mapper](https://github.com/norlab-ulaval/norlab_icp_mapper) SLAM was used to obtain the poses:
+    ```commandline
+    cd ./scripts/
+    ./add_lidar_poses
+    ```

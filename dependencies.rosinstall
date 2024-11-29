@@ -15,7 +15,7 @@
     uri: https://github.com/ctu-vras/cloud_proc.git
     version: master
 - git:
-    local-name: cloud_proc
+    local-name: pointcloud_motion_deskew
     uri: https://github.com/norlab-ulaval/pointcloud_motion_deskew.git
     version: melodic
 - git:

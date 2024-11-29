@@ -601,19 +601,6 @@ def radar_lidar_clouds():
     o3d.visualization.draw_geometries([lidar_pcd, radar_pcd])
 
 
-def rough_test():
-    from monoforce.datasets import ROUGH, rough_seq_paths
-
-    robot = 'marv'
-    for i in range(len(rough_seq_paths[robot])):
-        ds = ROUGH(path=rough_seq_paths[robot][i], dphys_cfg=dphys_cfg, lss_cfg=lss_cfg, is_train=False)
-        for j in tqdm(range(len(ds))):
-            t0 = time()
-            ts, controls = ds.get_controls(j)
-            t1 = time()
-            print('Time to get controls:', t1 - t0)
-
-
 def bevfusion_test():
     import torch
     from torch.utils.data import DataLoader
@@ -806,7 +793,6 @@ def main():
     # depth_range_image()
     # merge_heightmaps()
     # radar_lidar_clouds()
-    # rough_test()
     # bevfusion_test()
     merge_heightmaps1()
 
