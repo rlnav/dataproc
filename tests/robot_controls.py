@@ -1,3 +1,4 @@
+import os
 import torch
 from monoforce.datasets import ROUGH, rough_seq_paths
 from tqdm import tqdm
@@ -27,7 +28,7 @@ def main():
             plt.ylabel('Z [m]')
             plt.grid()
             plt.ylim(-1, 1)
-            plt.xlim(-0.1, 10.1)
+            plt.xlim(-0.1, 5.1)
 
             plt.subplot(142)
             plt.title('Trajectory Y(X)')
@@ -43,6 +44,7 @@ def main():
             plt.plot(ts, controls[:, 0], '.b')
             plt.xlabel('Time [s]')
             plt.ylabel('V [m/s]')
+            plt.ylim(-1.1, 1.1)
             plt.grid()
 
             plt.subplot(144)
@@ -50,11 +52,14 @@ def main():
             plt.plot(ts, controls[:, 1], '.b')
             plt.xlabel('Time [s]')
             plt.ylabel('Omega [rad/s]')
+            plt.ylim(-1.6, 1.6)
             plt.grid()
 
-            # plt.show()
             plt.pause(0.1)
             plt.draw()
+
+            os.makedirs('./gen/control_tests', exist_ok=True)
+            plt.savefig(f'./gen/control_tests/seq_{seq_i}_sample_{sample_i}.png')
 
 
 if __name__ == '__main__':

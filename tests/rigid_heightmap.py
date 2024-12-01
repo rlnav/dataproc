@@ -12,10 +12,11 @@ dphys_cfg = DPhysConfig()
 lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
 
 def segmentation_test():
-    path = rough_seq_paths[0]
+    # path = rough_seq_paths[0]
+    path = np.random.choice(rough_seq_paths)
     ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     for i in np.random.choice(range(len(ds)), 1):
-    # for i in [120, 294]:
+    # for i in [658]:
         print('Data index:', i)
         seg_points, seg_colors = ds.get_semantic_cloud(i, vis=False)
         seg_colors = normalize(seg_colors)
@@ -26,7 +27,7 @@ def segmentation_test():
 
         poses = ds.get_traj(i)['poses']
 
-        heightmap = ds.get_terrain_height_map(i, cached=False)
+        # heightmap = ds.get_terrain_height_map(i, cached=False)
         # points = hm_to_cloud(heightmap[0], cfg=dphys_cfg, mask=heightmap[1])
 
         # plt.figure(figsize=(10, 5))
@@ -40,7 +41,7 @@ def segmentation_test():
         pcd.points = o3d.utility.Vector3dVector(points)
         pcd.colors = o3d.utility.Vector3dVector(colors)
 
-        # coordinate frame
+        # coordinate frames
         pose_frames = []
         for pose in poses:
             pose_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3, origin=[0, 0, 0])
@@ -68,6 +69,17 @@ def rough_test():
     geom_points = hm_to_cloud(hm_geom[0], dphys_cfg, hm_geom[1])
     points = position(ds.get_cloud(sample_i))
 
+    # coordinate frame
+    pose_frames = []
+    for x, R in zip(Xs, Rs):
+        pose_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=0.3, origin=[0, 0, 0])
+        # transform coordinate frame
+        pose = np.eye(4)
+        pose[:3, 3] = x
+        pose[:3, :3] = R
+        pose_frame.transform(pose)
+        pose_frames.append(pose_frame)
+
     # visualize
     terrain_pcd = o3d.geometry.PointCloud()
     terrain_pcd.points = o3d.utility.Vector3dVector(terrain_points)
@@ -81,13 +93,13 @@ def rough_test():
     cloud_pcd.points = o3d.utility.Vector3dVector(points)
     cloud_pcd.paint_uniform_color([0, 1, 0])
 
-    o3d.visualization.draw_geometries([terrain_pcd])
-    o3d.visualization.draw_geometries([terrain_pcd, geom_pcd])
-    o3d.visualization.draw_geometries([terrain_pcd, geom_pcd, cloud_pcd])
+    o3d.visualization.draw_geometries([terrain_pcd] + pose_frames)
+    o3d.visualization.draw_geometries([terrain_pcd, geom_pcd] + pose_frames)
+    o3d.visualization.draw_geometries([terrain_pcd, geom_pcd, cloud_pcd] + pose_frames)
 
 
 def main():
-    segmentation_test()
+    # segmentation_test()
     rough_test()
 
 

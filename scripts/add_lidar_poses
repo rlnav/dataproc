@@ -84,6 +84,7 @@ def main():
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-16.bag'
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-58-52.bag',

@@ -25,8 +25,8 @@ def process_bag(bag_path, controls_topic, controls_path):
 def main():
     bag_paths = [
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive.bag',
-        # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-46-51.bag',
-        # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-54-43.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-46-51.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-54-43.bag',
         # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-12-34-53.bag',
         # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-01-40.bag',
         # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-13-17-08.bag',
@@ -47,6 +47,7 @@ def main():
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-54-18.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-16.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31.bag',
@@ -60,6 +61,9 @@ def main():
         data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH-v2/', data_path)
         print(f'Writing controls to {data_path}')
         controls_path = os.path.join(data_path, 'controls', 'cmd_vel.csv')
+        if os.path.exists(controls_path):
+            print(f'File {controls_path} already exists, skipping')
+            continue
 
         controls_topic = '/cmd_vel' if 'ugv' in bag_path else '/marv/cartesian_controller/cmd_vel'
         process_bag(bag_path, controls_topic, controls_path)

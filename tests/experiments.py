@@ -25,49 +25,6 @@ def data_slicing():
     ds.get_global_cloud(vis=True, cached=False, save=False, step=30)
 
 
-def create_global_cloud_map():
-    """
-    Create global heightmap cloud from the sequence of point clouds
-    """
-    dist_th = 0.1
-    robot = 'husky_oru'
-    paths = rough_seq_paths[robot]
-
-    for path in paths:
-        print('Processing sequence:', path)
-        ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
-
-        # create global cloud
-        poses = ds.get_poses()
-        global_cloud = None
-        for i in tqdm(range(len(ds))):
-            cloud = ds.get_cloud(i)
-            T = poses[i]
-            cloud = transform_cloud(cloud, T)
-            points = position(cloud)
-            points = filter_grid(points, ds.dphys_cfg.grid_res, keep='first', log=False)
-            if global_cloud is None:
-                global_cloud = points
-            else:
-                tree = cKDTree(global_cloud)
-                dists, idxs = tree.query(points, k=1)
-                new_pts_mask = dists > dist_th
-                new_points = points[new_pts_mask]
-                global_cloud = np.vstack((global_cloud, new_points))
-
-        # visualize global cloud
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(global_cloud)
-
-        pcd_poses = o3d.geometry.PointCloud()
-        pcd_poses.points = o3d.utility.Vector3dVector(poses[:, :3, 3])
-        pcd_poses.paint_uniform_color([1, 0, 0])
-
-        # save global cloud
-        # o3d.io.write_point_cloud(os.path.join(path, 'map', 'map.pcd'), pcd)
-        o3d.visualization.draw_geometries([pcd, pcd_poses])
-
-
 def visualize_point_cloud_map():
     """
     Visualize point cloud map and trajectory point cloud

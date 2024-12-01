@@ -65,8 +65,8 @@ def heightmap():
         heightmap, measured_mask = hm[0], hm[1]
 
         t1 = time()
-        # hm0 = ds.get_terrain_height_map(i, cached=False)
-        hm0 = ds.get_geom_height_map(i, cached=False)
+        hm0 = ds.get_terrain_height_map(i, cached=False)
+        # hm0 = ds.get_geom_height_map(i, cached=False)
         print(f'Getting terrain heightmap took: {time() - t1} [sec]')
         heightmap0 = hm0[0]
 

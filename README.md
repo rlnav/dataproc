@@ -32,7 +32,7 @@ Make sure to adjust the paths and data topics.
     ./save_semantic_pseudolabels.sh
     ```
   
-- Save localization (lidar poses). The [norlab-cip-mapper](https://github.com/norlab-ulaval/norlab_icp_mapper) SLAM was used to obtain the poses:
+- Save localization (lidar poses). The [norlab_icp_mapper](https://github.com/norlab-ulaval/norlab_icp_mapper) SLAM was used to obtain the poses:
     ```commandline
     cd ./scripts/
     ./add_lidar_poses
