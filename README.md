@@ -4,6 +4,10 @@ Data processing tools from bag files to data sequences.
 The dataset is used to train
 [MonoForce](https://github.com/ctu-vras/monoforce) traversability estimation models.
 
+The bag files are available at:
+- [http://subtdata.felk.cvut.cz/outdoor-dataset/](http://subtdata.felk.cvut.cz/outdoor-dataset/)
+- [http://subtdata.felk.cvut.cz/robingas/](http://subtdata.felk.cvut.cz/robingas/)
+
 ## Usage
 
 Make sure to adjust the paths and data topics.
