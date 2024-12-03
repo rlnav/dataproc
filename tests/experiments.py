@@ -9,21 +9,6 @@ def vw_to_track_vel(v, w, r=1.0):
     v_l = v - r * w
     return v_r, v_l
 
-def data_slicing():
-    # robot = np.random.choice(['husky', 'husky_oru', 'tradr'])
-    robot = 'husky_oru'
-    path = np.random.choice(rough_seq_paths[robot])
-    print(f"Processing sequence: {os.path.basename(path)}")
-    ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
-    ids = np.random.choice(range(len(ds)), 10)
-    print(f"Selected sample ids: {ids}")
-    ds_slice = ds[ids]
-    print(f"Full dataset contains {len(ds.ids)} samples")
-    print(f"Sliced dataset contains {len(ds_slice.ids)} samples")
-    assert len(ds_slice) == len(ids)
-    assert set(ds_slice.ids).issubset(set(ds.ids))
-    ds.get_global_cloud(vis=True, cached=False, save=False, step=30)
-
 
 def visualize_point_cloud_map():
     """

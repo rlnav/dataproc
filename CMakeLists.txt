@@ -11,7 +11,7 @@ include_directories()
 
 catkin_install_python(PROGRAMS
   nodes/save_imgs_clouds
-  nodes/play_tf_static
+  nodes/tf_static_publisher
   nodes/cloud_proc
   nodes/gridmap_masker
   nodes/monoforce_demo

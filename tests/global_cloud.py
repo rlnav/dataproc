@@ -13,7 +13,21 @@ def transform_cloud(cloud, Tr):
     cloud_tr = Tr[:3, :3] @ cloud.T + Tr[:3, 3:]
     return cloud_tr.T
 
-def main():
+def data_slicing():
+    path = np.random.choice(rough_seq_paths)
+    ds = ROUGH(path)
+    ids = np.random.choice(range(len(ds)), 10)
+    print(f"Selected sample ids: {ids}")
+    ds_slice = ds[ids]
+    print(f"Full dataset contains {len(ds.ids)} samples")
+    print(f"Sliced dataset contains {len(ds_slice.ids)} samples")
+    assert len(ds_slice) == len(ids)
+    assert set(ds_slice.ids).issubset(set(ds.ids))
+    ds_slice.get_global_cloud(vis=True, cached=False, save=False, step=1)
+    # ds.get_global_cloud(vis=True, cached=False, save=False, step=10)
+
+
+def create_global_cloud():
     """
     Create global heightmap cloud from the sequence of point clouds
     """
@@ -60,6 +74,11 @@ def main():
         # save global cloud
         # o3d.io.write_point_cloud(os.path.join(path, 'map', 'map.pcd'), pcd)
         o3d.visualization.draw_geometries([pcd] + pcd_poses)
+
+
+def main():
+    data_slicing()
+    create_global_cloud()
 
 
 if __name__ == '__main__':

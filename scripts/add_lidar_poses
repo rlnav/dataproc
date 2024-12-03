@@ -95,9 +95,12 @@ def main():
         assert os.path.exists(bag_path), f'Path {bag_path} does not exist'
         data_path = os.path.basename(bag_path.replace('.bag', ''))
         data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH-v2/', data_path)
-        poses_path = os.path.join(data_path, 'poses', 'lidar_poses_all.csv')
+        poses_path = os.path.join(data_path, 'poses', 'lidar_poses.csv')
         print(f'Writing lidar poses to {poses_path}')
         lidar_topic = '/points_filtered_kontron'
+        if os.path.exists(poses_path):
+            print(f'File {poses_path} already exists, skipping')
+            continue
 
         process_bag(bag_path, poses_path, lidar_topic)
     print('Done')
