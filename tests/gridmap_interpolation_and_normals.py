@@ -85,11 +85,14 @@ def normals():
     mlab.figure(bgcolor=(1, 1, 1), size=(800, 800))
     mlab.surf(x_grid.numpy(), y_grid.numpy(), z_grid.numpy(), colormap='jet', opacity=0.7)
 
-    points = torch.stack([x_grid, y_grid, z_grid], dim=-1).view(-1, 3)
+    # random points withing -d_max and d_max
+    n_pts = 1000
+    points_xy = torch.rand(n_pts, 2) * 2 * dphys_cfg.d_max - dphys_cfg.d_max
     z_points, normals = dphysics.interpolate_grid(z_grid.unsqueeze(0),
-                                                  points[..., 0].unsqueeze(0),
-                                                  points[..., 1].unsqueeze(0), return_normals=True)
-    points_grid = points.clone()
+                                                  points_xy[..., 0].unsqueeze(0),
+                                                  points_xy[..., 1].unsqueeze(0), return_normals=True)
+    points_grid = torch.zeros(n_pts, 3)
+    points_grid[..., :2] = points_xy
     points_grid[..., 2] = z_points.squeeze(0)
     normals = normals.squeeze(0)
 

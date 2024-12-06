@@ -53,9 +53,13 @@ def segmentation_test():
 
 
 def rough_test():
-    path = np.random.choice(rough_seq_paths)
+    seq_i = np.random.choice(len(rough_seq_paths))
+    print(f'Path sequence id: {seq_i}')
+    path = rough_seq_paths[seq_i]
     ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    ds = ds[np.random.choice(len(ds), 32, replace=False)]
 
+    # sample_i = 0
     sample_i = np.random.choice(range(len(ds)))
     print('Sample index:', sample_i)
     sample = ds[sample_i]

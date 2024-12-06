@@ -1,5 +1,4 @@
 import os
-import torch
 from monoforce.datasets import ROUGH, rough_seq_paths
 from tqdm import tqdm
 import matplotlib.pyplot as plt
@@ -15,8 +14,6 @@ def main():
             traj_ts, states = ds.get_states_traj(sample_i)
             ts, controls = ds.get_controls(sample_i)
             Xs = states[0]
-            print('Xs shape:', Xs.shape)
-            print('Traj dt:', torch.diff(traj_ts).mean())
 
             # visualization
             plt.clf()
