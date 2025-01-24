@@ -2,8 +2,8 @@ import torch
 from time import time
 import matplotlib.pyplot as plt
 from monoforce.vis import set_axes_equal
-from monoforce.models.dphysics import DPhysics, generate_control_inputs
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphysics import DPhysics, generate_control_inputs
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
 import matplotlib as mpl
 mpl.use('Qt5Agg')

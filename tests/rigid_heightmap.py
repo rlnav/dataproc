@@ -1,10 +1,9 @@
 from monoforce.datasets import ROUGH, rough_seq_paths
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.utils import read_yaml, normalize
 from monoforce.cloudproc import hm_to_cloud, position
 import numpy as np
 import open3d as o3d
-import matplotlib.pyplot as plt
 import matplotlib as mpl
 mpl.use('Qt5Agg')
 

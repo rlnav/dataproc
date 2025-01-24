@@ -1,5 +1,5 @@
-from monoforce.models.dphysics import DPhysics, interpolate_grid
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphysics import DPhysics, interpolate_grid
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
 from mayavi import mlab
 import torch

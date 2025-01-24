@@ -15,13 +15,6 @@
     <arg name="output_path" default=""/>
 <!--     <param name="use_sim_time" value="true"/> -->
 
-    <arg if="0" name="tf_static_bag" default="$(dirname)/../data/bags/outdoor_dataset/24-10-05-pokor-petrin/marv_2024-10-05-12-34-53.bag"/>
-    <node name="tf_static_publisher" pkg="dataproc" type="tf_static_publisher" output="screen">
-        <rosparam subst_value="true">
-            bag_path: $(arg tf_static_bag)
-        </rosparam>
-    </node>
-
     <!-- Data Processor -->
     <node pkg="dataproc" type="save_imgs_clouds" name="save_imgs_clouds" output="screen">
         <rosparam subst_value="true">

@@ -162,7 +162,7 @@ def vis_trajectory():
 
 
 def vis_data():
-    from monoforce.datasets import ROUGH, Rellis3D
+    from monoforce.datasets import ROUGH
 
     # paths = rellis3d_seq_paths
     paths = rough_seq_paths[robot]
@@ -447,7 +447,7 @@ def merge_heightmaps():
     from monoforce.cloudproc import merge_heightmaps, hm_to_cloud
     from monoforce.transformations import transform_cloud
     from monoforce.datasets.rough import ROUGH, rough_seq_paths
-    from monoforce.dphys_config import DPhysConfig
+    from monoforce.models.traj_predictor.dphys_config import DPhysConfig
     from monoforce.utils import read_yaml
     from tqdm import tqdm
     import numpy as np
@@ -552,8 +552,7 @@ def bevfusion_test():
     from monoforce.datasets.rough import ROUGH, rough_seq_paths
     from monoforce.utils import read_yaml, position
     from monoforce.transformations import transform_cloud
-    from monoforce.dphys_config import DPhysConfig
-    from monoforce.models.terrain_encoder.bevfusion import BEVFusion
+    from monoforce.models.traj_predictor.dphys_config import DPhysConfig
     from monoforce.models.terrain_encoder.lidarbev import LidarBEV
 
     class Data(ROUGH):
@@ -648,13 +647,11 @@ def bevfusion_test():
     plt.show()
 
 def merge_heightmaps1():
-    from monoforce.cloudproc import merge_heightmaps, hm_to_cloud
+    from monoforce.cloudproc import hm_to_cloud
     from monoforce.transformations import position, transform_cloud
     from monoforce.datasets.rough import ROUGH, rough_seq_paths
-    from monoforce.dphys_config import DPhysConfig
+    from monoforce.models.traj_predictor.dphys_config import DPhysConfig
     from monoforce.utils import read_yaml
-    from tqdm import tqdm
-    import numpy as np
     import open3d as o3d
     from scipy.spatial.transform import Rotation
 

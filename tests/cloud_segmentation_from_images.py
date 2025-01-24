@@ -1,7 +1,7 @@
 from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
 from monoforce.datasets.coco import COCO_CATEGORIES
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.utils import read_yaml, normalize
 from monoforce.transformations import position
 import numpy as np

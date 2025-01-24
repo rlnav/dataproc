@@ -6,7 +6,7 @@ import torch
 import matplotlib.pyplot as plt
 from monoforce.datasets import ROUGH, rough_seq_paths
 from monoforce.transformations import position
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.cloudproc import estimate_heightmap
 import matplotlib as mpl
 mpl.use('TkAgg')

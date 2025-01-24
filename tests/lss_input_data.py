@@ -8,7 +8,7 @@ from monoforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_m
 from monoforce.cloudproc import position, hm_to_cloud
 from monoforce.datasets import ROUGH, rough_seq_paths
 from monoforce.utils import read_yaml
-from monoforce.dphys_config import DPhysConfig
+from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 mpl.use('Qt5Agg')
 
 dphys_cfg = DPhysConfig()
