@@ -1,0 +1,18 @@
+#!/usr/bin/env python
+
+import rospy
+import rosbag
+from tf2_msgs.msg import TFMessage
+from datetime import datetime
+
+rospy.init_node("tf_static_publisher")
+pub = rospy.Publisher("/tf_static", TFMessage, latch=True, queue_size=1)
+
+bag_path = rospy.get_param("~bag_path")
+rospy.loginfo("Reading %s" % bag_path)
+bag = rosbag.Bag(bag_path)
+for topic, msg, t in bag.read_messages(topics=['/tf_static']):
+    rospy.loginfo(f"Publishing topic {topic} at time {datetime.fromtimestamp(t.to_sec())}")
+    pub.publish(msg)
+
+rospy.spin()
