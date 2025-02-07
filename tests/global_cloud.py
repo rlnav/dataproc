@@ -28,21 +28,34 @@ def data_slicing():
 
 
 def create_global_cloud():
+    from mayavi import mlab
+    from monoforce.vis import draw_coord_frames
     """
     Create global heightmap cloud from the sequence of point clouds
     """
     dist_th = 0.1
 
-    for path in rough_seq_paths:
+    # paths = rough_seq_paths
+    paths = [
+        '/home/ruslan/data/datasets/ORU/radarize__2024-04-27-15-02-12_0',
+    ]
+    for path in paths:
         print('Processing sequence:', path)
         ds = ROUGH(path)
 
         # create global cloud
         global_cloud = None
-        poses = []
-        for i in tqdm(range(0, len(ds), 10)):
-            cloud = ds.get_cloud(i, gravity_aligned=False)
-            pose = ds.get_pose(i)
+        step = 1
+        wps = np.array([ds.poses[50], ds.poses[140], ds.poses[280], ds.poses[370]])
+        wps[:, :3, :3] = np.eye(3)
+        for i in tqdm(range(0, 370, step)):
+            try:
+                cloud = ds.get_cloud(i, gravity_aligned=False)
+                pose = ds.get_pose(i)
+            except Exception as e:
+                print(f"Error: {e}")
+                continue
+
             points = position(cloud)
             # remove nans
             mask = np.all(np.isfinite(points), axis=1)
@@ -58,27 +71,36 @@ def create_global_cloud():
                 new_points = points[new_pts_mask]
                 global_cloud = np.vstack((global_cloud, new_points))
 
-            poses.append(pose)
+        # visualizations with mayavi
+        mlab.figure(bgcolor=(1, 1, 1), size=(1600, 800))
+        print(np.min(global_cloud[:, 2]), np.max(global_cloud[:, 2]))
+        color = global_cloud[:, 2]
+        mlab.points3d(global_cloud[:, 0], global_cloud[:, 1], global_cloud[:, 2], color, scale_factor=0.02, opacity=0.6, colormap='jet')
+        mlab.plot3d(ds.poses[:370, 0, 3], ds.poses[:370, 1, 3], ds.poses[:370, 2, 3], color=(0, 0, 1), tube_radius=0.2)
+        draw_coord_frames(wps, scale=15)
+        mlab.show()
 
-        # visualize global cloud
-        pcd = o3d.geometry.PointCloud()
-        pcd.points = o3d.utility.Vector3dVector(global_cloud)
 
-        # create a coordinate frame for each pose
-        pcd_poses = []
-        for pose in poses:
-            frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=5.0)
-            frame.transform(pose)
-            pcd_poses.append(frame)
+def show_map():
+    map = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-04-27-15-02-12_0/map/map.pcd')
+    traj = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-04-27-15-02-12_0/map/trajectory.pcd')
 
-        # save global cloud
-        # o3d.io.write_point_cloud(os.path.join(path, 'map', 'map.pcd'), pcd)
-        o3d.visualization.draw_geometries([pcd] + pcd_poses)
+    # map = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-05-24-13-21-28_0/map/map.pcd')
+    # traj = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-05-24-13-21-28_0/map/trajectory.pcd')
 
+    # map = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-02-07-10-47-13_0/map/map.pcd')
+    # traj = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2024-02-07-10-47-13_0/map/trajectory.pcd')
+
+    # map = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2023-08-16-11-02-33_0/map/map.pcd')
+    # traj = o3d.io.read_point_cloud('/home/ruslan/data/datasets/ORU/radarize__2023-08-16-11-02-33_0/map/trajectory.pcd')
+
+    traj.paint_uniform_color([0, 0, 0])
+    o3d.visualization.draw_geometries([map, traj])
 
 def main():
-    data_slicing()
+    # data_slicing()
     create_global_cloud()
+    # show_map()
 
 
 if __name__ == '__main__':
