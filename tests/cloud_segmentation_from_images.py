@@ -1,8 +1,8 @@
 import os
 from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
 from monoforce.datasets.coco import COCO_CATEGORIES
-from monoforce.datasets.rough import ROUGH, rough_seq_paths
-from monoforce.utils import read_yaml, normalize
+from monoforce.datasets.rough import ROUGH, rough_seq_paths, segment_vegetation, lower_green, upper_green
+from monoforce.utils import normalize
 from monoforce.transformations import position
 import numpy as np
 import open3d as o3d
@@ -10,14 +10,7 @@ import matplotlib.pyplot as plt
 import torch
 import cv2
 import matplotlib as mpl
-mpl.use('Qt5Agg')
-
-
-# HSV bounds for green
-lower_green = np.array([35, 40, 40])
-upper_green = np.array([85, 255, 255])
-# lower_green = np.array([15, 20, 40])
-# upper_green = np.array([85, 255, 255])
+mpl.use('TkAgg')
 
 
 def segment_cloud():
@@ -150,20 +143,9 @@ def colorize_cloud():
     o3d.visualization.draw_geometries([pcd])
 
 
-def segment_vegetation(rgb, lower_green, upper_green):
-    hsv = cv2.cvtColor(rgb, cv2.COLOR_RGB2HSV)
-    mask = cv2.inRange(hsv, lower_green, upper_green)
-    # make sure mask is binary
-    mask = mask > 0
-    return mask
-
 def vegetation_segmentation():
     path = rough_seq_paths[2]
     ds = ROUGH(path=path)
-
-    # Define the lower and upper bounds for green in HSV
-    lower_green = np.array([25, 40, 40])
-    upper_green = np.array([85, 255, 255])
 
     # sample_i = np.random.choice(range(len(ds)))
     sample_i = 55  # 55, 342
@@ -248,24 +230,22 @@ def vegetation_segmentation_cloud():
 def choose_veg_color():
     np.random.seed(42)
 
-    path = np.random.choice(rough_seq_paths)
+    # path = np.random.choice(rough_seq_paths)
+    path = rough_seq_paths[2]
     print(f'Path: {path}')
     ds = ROUGH(path=path)
 
-    # sample_i = 55
-    sample_i = np.random.choice(range(len(ds)))
+    sample_i = 55
+    # sample_i = np.random.choice(range(len(ds)))
     print(f'Sample index: {sample_i}')
-    # cam = ds.camera_names[1]
-    cam = np.random.choice(ds.camera_names)
+    cam = ds.camera_names[1]
+    # cam = np.random.choice(ds.camera_names)
     print(f'Camera: {cam}')
     bgr, _ = ds.get_cached_resized_img(sample_i, camera=cam)
     bgr = np.asarray(bgr)[..., ::-1]
 
     def nothing(x):
         pass  # Placeholder function for trackbars
-
-    # Load the image
-    hsv = cv2.cvtColor(bgr, cv2.COLOR_BGR2HSV)
 
     # Create a window
     cv2.namedWindow("HSV Selector")
@@ -290,10 +270,10 @@ def choose_veg_color():
         # Create mask based on current trackbar positions
         lower_bound = np.array([low_h, low_s, low_v])
         upper_bound = np.array([high_h, high_s, high_v])
-        mask = cv2.inRange(hsv, lower_bound, upper_bound)
+        mask = segment_vegetation(bgr, lower_bound, upper_bound)
 
         # Apply mask to the original image
-        result = cv2.bitwise_and(bgr, bgr, mask=mask)
+        result = cv2.bitwise_and(bgr, bgr, mask=np.asarray(mask, dtype=np.uint8))
 
         # Show results
         cv2.imshow("Original", bgr)
@@ -311,12 +291,65 @@ def choose_veg_color():
     cv2.destroyAllWindows()
 
 
+def green_mask():
+    from monoforce.datasets.coco import COCO_CLASSES
+
+    ds = ROUGH(path=rough_seq_paths[2])
+    sample_i = 55
+    print(f'Sample index: {sample_i}')
+    # points = position(ds.get_cloud(sample_i, gravity_aligned=False))
+    soft_classes = ds.lss_cfg['soft_classes']
+    rigid_classes = [c for c in COCO_CLASSES if c not in soft_classes]
+    points, _ = ds.get_semantic_cloud(sample_i, classes=rigid_classes, vis=False)
+    points = torch.as_tensor(points, dtype=torch.float32)
+
+    cam_i = 1
+    cam = ds.camera_names[cam_i]
+    rgb, K = ds.get_image(sample_i, camera=cam)
+    rgb = np.asarray(rgb)
+
+    E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
+    E = np.asarray(E, dtype=np.float32).reshape((4, 4))
+
+    E = torch.as_tensor(E)
+    K = torch.as_tensor(K)
+
+    img_plane_points = ego_to_cam(points.T, E[:3, :3], E[:3, 3], K).T
+    cam_points_mask = get_only_in_img_mask(img_plane_points.T, rgb.shape[0], rgb.shape[1])
+
+    veg_rgb_mask = segment_vegetation(rgb, lower_green, upper_green)
+
+    # show image with opencv
+    bgr = rgb[..., ::-1]
+    segm = cv2.bitwise_and(bgr, bgr, mask=np.asarray(veg_rgb_mask, dtype=np.uint8))
+    result = cv2.addWeighted(bgr, 0.7, segm, 0.3, 0)
+
+    cv2.imshow('result', result)
+    cv2.waitKey(0)
+
+    # mask of the points that belong to vegetation
+    uv = img_plane_points[cam_points_mask, :2].numpy().astype(int)
+    veg_rgb_mask = veg_rgb_mask[uv[:, 1], uv[:, 0]]
+
+    veg_points = points[cam_points_mask][veg_rgb_mask]
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points.numpy())
+    pcd.paint_uniform_color([0, 0, 1])
+
+    veg_pcd = o3d.geometry.PointCloud()
+    veg_pcd.points = o3d.utility.Vector3dVector(veg_points.numpy())
+    veg_pcd.paint_uniform_color([0, 1, 0])
+    o3d.visualization.draw_geometries([pcd, veg_pcd])
+
+
 def main():
     # segment_cloud()
     # colorize_cloud()
     # vegetation_segmentation()
     # vegetation_segmentation_cloud()
     choose_veg_color()
+    # green_mask()
 
 
 if __name__ == '__main__':

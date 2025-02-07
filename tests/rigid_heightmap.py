@@ -11,13 +11,13 @@ dphys_cfg = DPhysConfig()
 lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
 
 def segmentation_test():
-    # path = rough_seq_paths[0]
-    path = np.random.choice(rough_seq_paths)
+    path = rough_seq_paths[2]
+    # path = np.random.choice(rough_seq_paths)
     ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
-    for i in np.random.choice(range(len(ds)), 1):
-    # for i in [658]:
+    # for i in np.random.choice(range(len(ds)), 1):
+    for i in [55]:
         print('Data index:', i)
-        seg_points, seg_colors = ds.get_semantic_cloud(i, vis=False)
+        seg_points, seg_colors = ds.get_semantic_cloud(i, remove_vegetation=True, vis=False)
         seg_colors = normalize(seg_colors)
         traj_points = ds.get_footprint_traj_points(i)
         traj_colors = np.ones_like(traj_points) * [0, 0, 1]
@@ -52,14 +52,13 @@ def segmentation_test():
 
 
 def rough_test():
-    seq_i = np.random.choice(len(rough_seq_paths))
+    seq_i = 2  #np.random.choice(len(rough_seq_paths))
     print(f'Path sequence id: {seq_i}')
     path = rough_seq_paths[seq_i]
     ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
-    ds = ds[np.random.choice(len(ds), 32, replace=False)]
+    # ds = ds[np.random.choice(len(ds), 32, replace=False)]
 
-    # sample_i = 0
-    sample_i = np.random.choice(range(len(ds)))
+    sample_i = 55  # np.random.choice(range(len(ds)))
     print('Sample index:', sample_i)
     sample = ds[sample_i]
     (imgs, rots, trans, intrins, post_rots, post_trans,
