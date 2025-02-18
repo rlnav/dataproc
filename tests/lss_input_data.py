@@ -105,8 +105,8 @@ def frustum_points():
         frame.transform(pose)
         cam_frames.append(frame)
 
-    # o3d.visualization.draw_geometries([frustum_pcd, grav_alined_frame, terrain_pcd] + cam_frames)
-    o3d.visualization.draw_geometries([grav_alined_frame, terrain_pcd] + cam_frames)
+    o3d.visualization.draw_geometries([frustum_pcd, grav_alined_frame, terrain_pcd] + cam_frames)
+    # o3d.visualization.draw_geometries([grav_alined_frame, terrain_pcd] + cam_frames)
 
 
 def main():

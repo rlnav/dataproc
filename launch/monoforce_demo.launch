@@ -2,7 +2,7 @@
 <launch>
     <arg name="robot" default="marv"/>
     <arg name="rviz" default="true"/>
-    <arg name="traj_sim_time" default="15.0"/>
+    <arg name="traj_sim_time" default="7.0"/>
     <arg name="bag_path" default="/home/ruslan/Desktop/outdoor_dataset/24-09-26-petrin-marv_clone/photodoc/VOD_20240926_142432.bag"/>
 
     <!-- Load robot description -->
