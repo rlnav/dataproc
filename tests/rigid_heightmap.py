@@ -17,7 +17,7 @@ def segmentation_test():
     # for i in np.random.choice(range(len(ds)), 1):
     for i in [55]:
         print('Data index:', i)
-        seg_points, seg_colors = ds.get_semantic_cloud(i, remove_vegetation=True, vis=False)
+        seg_points, seg_colors = ds.get_semantic_cloud(i, vis=False)
         seg_colors = normalize(seg_colors)
         traj_points = ds.get_footprint_traj_points(i)
         traj_colors = np.ones_like(traj_points) * [0, 0, 1]
