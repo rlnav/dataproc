@@ -36,6 +36,15 @@ Make sure to adjust the paths and data topics.
     ./save_semantic_pseudolabels.sh
     ```
   
+- Save semantic pseudo labels using the [WildScenes](https://github.com/csiro-robotics/WildScenes) models:
+    ```commandline
+    cd ./scripts/
+    ./save_semantic_pseudolabels_wildscenes
+    ```
+  The script is based on the [mmsegmentation](https://mmsegmentation.readthedocs.io/en/main/user_guides/3_inference.html)
+  inference tutorial. Please make sure to [install](https://github.com/csiro-robotics/WildScenes/blob/main/installation.md) the required dependencies
+  and download the WildScenes [pretrained models](https://github.com/csiro-robotics/WildScenes/tree/main?tab=readme-ov-file#trained-models).
+  
 - Save localization (lidar poses). The [norlab_icp_mapper](https://github.com/norlab-ulaval/norlab_icp_mapper) SLAM was used to obtain the poses:
     ```commandline
     cd ./scripts/

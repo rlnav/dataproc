@@ -1,0 +1,18 @@
+#! /usr/bin/env python
+
+from mmseg.apis import MMSegInferencer
+import os
+from monoforce.datasets.rough import rough_seq_paths
+
+
+config_path = '../packages/WildScenes/wildscenes/configs/deeplabv3/deeplabv3_r50-d8_2xb20-80k_wildscenes-512x512_standard.py'
+checkpoint_path = '../packages/WildScenes/wildscenes/configs/pretrained_models/deeplabv3_wildscenes.pth'
+inferencer = MMSegInferencer(model=config_path, weights=checkpoint_path, device='cuda:0')
+
+batch_size = 32
+for seq_path in rough_seq_paths:
+    img_folder = os.path.join(seq_path, 'images/resized/')
+    img_paths = [os.path.join(img_folder, img) for img in os.listdir(img_folder) if img.endswith('.png')]
+    for i in range(0, len(img_paths), batch_size):
+        batch = img_paths[i:i + batch_size]
+        inferencer(batch, out_dir=img_folder.replace('resized', 'wildscenes_seg'), img_out_dir='vis', pred_out_dir='seg')
