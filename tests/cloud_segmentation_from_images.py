@@ -1,5 +1,8 @@
+import sys
+sys.path.append('../src')
+sys.path.append('../../monoforce/monoforce/src')
 from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
-from monoforce.datasets.coco import COCO_CATEGORIES
+from monoforce.datasets.wildscenes.utils2d import METAINFO
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
 from monoforce.utils import normalize
 from monoforce.transformations import position
@@ -7,26 +10,22 @@ import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 import torch
-import cv2
 import matplotlib as mpl
 mpl.use('TkAgg')
 
 
 def segment_cloud():
-    path = rough_seq_paths[0]
+    path = rough_seq_paths[1]
     ds = ROUGH(path=path)
-    # ds.get_semantic_cloud_wildscenes(0, vis=True)
+    sample_i = 100 #np.random.randint(0, len(ds))
+    # classes = METAINFO['classes']
+    classes = [c for c in METAINFO['classes'] if c not in ds.lss_cfg['soft_classes']]
+    print(classes)
+    ds.get_semantic_cloud(sample_i, classes=classes, vis=True)
     # return
 
     void_id = 133
-    coco_classes = [i['name'].replace('-merged', '').replace('-other', '') for i in COCO_CATEGORIES] + ['void']
-    coco_colors = [(np.array(color['color']) / 255).tolist() for color in COCO_CATEGORIES] + [[0., 0., 0.]]
-    # selected_classes = ['person', 'tree', 'building']
-    selected_classes = np.copy(coco_classes)
-    # selected_classes = ['person']
-
-    # sample_i = np.random.choice(range(len(ds)))
-    sample_i = 120
+    label_2_rgb = {cidx: p for cidx, p in zip(METAINFO['cidx'], METAINFO['palette'])}
 
     lidar_points = position(ds.get_cloud(sample_i, gravity_aligned=False))
     points = []
@@ -43,12 +42,10 @@ def segment_cloud():
         seg_label_cam = np.asarray(seg_label_cam)
         # transform segmentation labels to colors
         seg_color_cam = np.zeros(rgb.shape, dtype=np.float32)
+        for cidx, c in label_2_rgb.items():
+            seg_color_cam[seg_label_cam == cidx] = c
+        seg_color_cam /= 255.
         rgb_seg = np.copy(rgb)
-        for color_i, color in enumerate(coco_colors):
-            if coco_classes[color_i] not in selected_classes:
-                continue
-            # print(f'Colorizing {coco_classes[color_i]} with {color}')
-            seg_color_cam[seg_label_cam == color_i] = color
         rgb_seg[seg_label_cam != void_id] = normalize(seg_color_cam + rgb)[seg_label_cam != void_id]
 
         E = ds.calib['transformations'][f'T_base_link__{cam}']['data']
@@ -75,6 +72,15 @@ def segment_cloud():
         plt.imshow(rgb_seg)
         # plt.scatter(cam_points[:, 0], cam_points[:, 1], s=1, c=lidar_points[mask, 2],
         #             cmap='jet', alpha=0.2, vmin=-1, vmax=1)
+
+    # display color pallete with class names
+    plt.figure()
+    plt.axis('off')
+    for i, c in enumerate(METAINFO['palette']):
+        plt.subplot(len(METAINFO['palette']), 1, i + 1)
+        plt.imshow(np.ones((100, 100, 3), dtype=np.float32) * c / 255.)
+        plt.title(METAINFO['classes'][i])
+        plt.axis('off')
 
     # plt.savefig('segmentation_demo.png')
     plt.show()
