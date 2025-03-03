@@ -9,13 +9,14 @@ from tqdm import tqdm
 
 
 config_path = '../packages/WildScenes/wildscenes/configs/deeplabv3/deeplabv3_r50-d8_2xb20-80k_wildscenes-512x512_standard.py'
-checkpoint_path = '../packages/WildScenes/wildscenes/configs/pretrained_models/deeplabv3_wildscenes.pth'
+checkpoint_path = '../packages/WildScenes/pretrained_models/deeplabv3_wildscenes.pth'
 model = init_model(config_path, checkpoint_path)
 
 for seq_path in tqdm(rough_seq_paths):
-    img_folder = os.path.join(seq_path, 'images/resized/')
-    seg_folder = img_folder.replace('resized', 'wildscenes_seg/seg')
-    vis_folder = img_folder.replace('resized', 'wildscenes_seg/vis')
+    print(f'Processing {seq_path}')
+    img_folder = os.path.join(seq_path, 'images')
+    seg_folder = os.path.join(img_folder, 'wildscenes_seg/seg')
+    vis_folder = os.path.join(img_folder, 'wildscenes_seg/vis')
     os.makedirs(seg_folder, exist_ok=True)
     os.makedirs(vis_folder, exist_ok=True)
     img_paths = sorted([os.path.join(img_folder, img) for img in os.listdir(img_folder) if img.endswith('.png')])
