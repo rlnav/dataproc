@@ -21,8 +21,8 @@ def visualize_wildscenes():
 
 
 def main():
-    # visualize_rough()
-    visualize_wildscenes()
+    visualize_rough()
+    # visualize_wildscenes()
 
 
 if __name__ == '__main__':
