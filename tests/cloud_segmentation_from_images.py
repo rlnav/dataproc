@@ -6,6 +6,7 @@ from monoforce.datasets.wildscenes.utils3d import METAINFO
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
 from monoforce.utils import normalize
 from monoforce.transformations import position
+from monoforce.imgproc import undistort_image
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
@@ -16,12 +17,13 @@ mpl.use('TkAgg')
 
 
 def segment_cloud():
-    path = rough_seq_paths[1]
+    path = rough_seq_paths[-1]
     ds = ROUGH(path=path)
-    sample_i = np.random.randint(0, len(ds))
+    sample_i = 47  # np.random.randint(0, len(ds))
+    print('Sample:', sample_i)
     # classes = METAINFO['classes']
-    # classes = [c for c in METAINFO['classes'] if c not in ds.lss_cfg['soft_classes']]
-    # classes = ['grass']
+    # # classes = [c for c in METAINFO['classes'] if c not in ds.lss_cfg['soft_classes']]
+    # # classes = ['grass']
     # ds.get_semantic_cloud(sample_i, classes=classes, vis=True)
     # return
 
@@ -46,6 +48,13 @@ def segment_cloud():
         for cidx, c in zip(METAINFO['cidx'], METAINFO['palette']):
             seg_color[seg_label == cidx] = c
         seg_color /= 255.
+
+        # undistort image and segmentation label
+        D = np.asarray(ds.calib[cam]['distortion_coefficients']['data'])
+        rgb, _ = undistort_image(rgb, K, D)
+        seg_label, _ = undistort_image(seg_label, K, D)
+        seg_color, K = undistort_image(seg_color, K, D)
+
         rgb_seg = np.copy(rgb)
         rgb_seg[seg_label != void_id] = normalize(seg_color + rgb)[seg_label != void_id]
 
