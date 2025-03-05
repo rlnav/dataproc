@@ -12,27 +12,32 @@ from tqdm import tqdm
 config_path = '../packages/WildScenes/wildscenes/configs/deeplabv3/deeplabv3_r50-d8_2xb20-80k_wildscenes-512x512_standard.py'
 checkpoint_path = '../packages/WildScenes/pretrained_models/deeplabv3_wildscenes.pth'
 model = init_model(config_path, checkpoint_path)
-# paths = rough_seq_paths
-paths = [
-    # MARV
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-46-51/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-54-43/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-16-42/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-26-47/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-35-05/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-56-33/',
-    # TRADR
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-02-31/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-12-12/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-54-18/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42/',
-    '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-46/',
-]
+paths = rough_seq_paths
+# paths = [
+#     # MARV
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-46-51/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/marv_2024-09-26-13-54-43/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-16-42/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-26-47/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-35-05/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-56-33/',
+#     # # TRADR
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-02-31/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-10-petrin-clone/ugv_2024-09-10-17-12-12/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-54-18/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-46/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-58-52/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-08-30/',
+#     # '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-24-48/',
+# ]
 
 for seq_path in tqdm(paths):
     print(f'Processing {seq_path}')
@@ -49,9 +54,12 @@ for seq_path in tqdm(paths):
             continue
         # inference
         img = resize_img(Image.open(img_path))
-        result = inference_model(model, img)
+        img_path_resized = os.path.join(img_folder, 'resized', os.path.basename(img_path))
+        os.makedirs(os.path.dirname(img_path_resized), exist_ok=True)
+        img.save(img_path_resized)
+        result = inference_model(model, img_path_resized)
         seg = np.asarray(result.pred_sem_seg.data.cpu().numpy().squeeze(0), dtype=np.uint8)
-        vis = show_result_pyplot(model, img, result, show=False)
+        vis = show_result_pyplot(model, img_path_resized, result, show=False)
         # save segmentation
         Image.fromarray(seg).save(seg_path)
         Image.fromarray(vis).save(vis_path)

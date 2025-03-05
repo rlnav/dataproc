@@ -14,7 +14,7 @@ from sensor_msgs.msg import CompressedImage, PointCloud2, CameraInfo
 from time import time
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 import tf2_ros
-from ros_numpy import numpify, msgify
+from ros_numpy import numpify
 import matplotlib.pyplot as plt
 import matplotlib as mpl
 

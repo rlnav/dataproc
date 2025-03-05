@@ -2,7 +2,6 @@
 
 import os
 from monoforce.datasets import rough_seq_paths, ROUGH
-from monoforce.datasets.wildscenes import WildScenes, wild_seq_names
 from monoforce.utils import explore_data
 import matplotlib as mpl
 mpl.use('Qt5Agg')
@@ -15,6 +14,8 @@ def visualize_rough():
 
 
 def visualize_wildscenes():
+    from monoforce.datasets.wildscenes import WildScenes, wild_seq_names
+
     for seq in wild_seq_names:
         ds = WildScenes(seq, is_train=False)
         explore_data(ds, sample_range='random', save=False)

@@ -58,7 +58,7 @@ def main():
     for path_i, bag_path in enumerate(bag_paths):
         assert os.path.exists(bag_path), f'Path {bag_path} does not exist'
         data_path = os.path.basename(bag_path.replace('.bag', ''))
-        data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH-v2/', data_path)
+        data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/', data_path)
         print(f'Writing controls to {data_path}')
         controls_path = os.path.join(data_path, 'controls', 'cmd_vel.csv')
         if os.path.exists(controls_path):

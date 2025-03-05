@@ -84,24 +84,23 @@ def main():
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-13-58-46.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-03-57.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-14-42.bag',
-        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-16.bag'
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-09-26-petrin-marv_clone/ugv_2024-09-26-14-27-16.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-40-41.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-48-31.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-15-58-52.bag',
         '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-08-30.bag',
-        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-24-48.bag',
+        '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-05-pokor-petrin/ugv_2024-10-05-16-24-48.bag'
     ]
     for path_i, bag_path in enumerate(bag_paths):
         assert os.path.exists(bag_path), f'Path {bag_path} does not exist'
         data_path = os.path.basename(bag_path.replace('.bag', ''))
-        data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH-v2/', data_path)
+        data_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/', data_path)
         poses_path = os.path.join(data_path, 'poses', 'lidar_poses.csv')
         print(f'Writing lidar poses to {poses_path}')
         lidar_topic = '/points_filtered_kontron'
         if os.path.exists(poses_path):
             print(f'File {poses_path} already exists, skipping')
             continue
-
         process_bag(bag_path, poses_path, lidar_topic)
     print('Done')
 
