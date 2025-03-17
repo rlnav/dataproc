@@ -245,14 +245,20 @@ class Demo:
                     cv2.line(terrain_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
                     cv2.line(friction_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
             terrain_vis = cv2.resize(terrain_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
+            cv2.putText(terrain_vis, 'Elevation', (img_vis.shape[1]//4, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
             friction_vis = cv2.resize(friction_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
+            cv2.putText(friction_vis, 'Friction', (img_vis.shape[1] // 4, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),2)
             terrain_vis = np.concatenate([terrain_vis, friction_vis], axis=1)
             # concatenate images and terrain
             res_vis = np.concatenate([img_vis, terrain_vis], axis=0)
-            # cv2.imshow('Predictions', res_vis)
-            # if cv2.waitKey(1) & 0xFF == ord('q'):
-            #     break
-            self.video_writer.write(res_vis)
+
+            if vis:
+                cv2.imshow('Predictions', res_vis)
+                if cv2.waitKey(1) & 0xFF == ord('q'):
+                    break
+            else:
+                self.video_writer.write(res_vis)
+
         cv2.destroyAllWindows()
 
 

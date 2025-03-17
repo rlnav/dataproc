@@ -1,9 +1,9 @@
 #!/bin/bash
 
-SEQ=/home/ruslan/workspaces/traversability_ws/src/monoforce/monoforce/data/ROUGH/ugv_2024-10-05-16-24-48
+SEQ=$HOME/workspaces/traversability_ws/src/monoforce/monoforce/data/ROUGH/ugv_2024-10-05-16-24-48
 TERRAIN_ENCODERS=(lss)
 TRAJ_PREDICTORS=(dphysics)
-VIS=True
+VIS=False
 
 for TERRAIN_ENCODER in "${TERRAIN_ENCODERS[@]}"
 do
