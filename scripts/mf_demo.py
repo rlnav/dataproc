@@ -3,8 +3,6 @@
 import sys
 sys.path.append('../../monoforce/monoforce/src/')
 from tqdm import tqdm
-from time import time
-import matplotlib.pyplot as plt
 from matplotlib.colors import LinearSegmentedColormap
 import os
 import numpy as np
@@ -93,10 +91,11 @@ class Demo:
         # load data
         self.loader = self.get_dataloader(batch_size=batch_size, seq=seq)
 
-        # output folder to write results
-        self.output_folder = (f'./gen/demo_{os.path.basename(seq)}/'
-                              f'{robot}_{self.terrain_encoder.__class__.__name__}_'
-                              f'{self.traj_predictor.__class__.__name__}')
+        # output video file to write results
+        self.output_video = f'./gen/demo_{os.path.basename(seq)}.avi'
+        # create output folder
+        os.makedirs('./gen/', exist_ok=True)
+        self.video_writer = cv2.VideoWriter(self.output_video, cv2.VideoWriter_fourcc(*'XVID'), 10, (1248, 568))
 
     def get_terrain_encoder(self, path, model='lss'):
         if model == 'lss':
@@ -146,7 +145,7 @@ class Demo:
                                                            controls=controls)
             N_forces = forces_pred[0]  # (n_trajs, time_horizon, n_pts, 3)
             traj_costs = N_forces.norm(dim=-1).mean(dim=-1).std(dim=-1)
-            # traj_costs = N_forces.norm(dim=-1).mean(dim=-1).max(dim=-1)[0] #- N_forces.norm(dim=-1).mean(dim=-1).min(dim=-1)[0]
+            # traj_costs = N_forces.norm(dim=-1).mean(dim=-1).max(dim=-1)[0]
         else:
             raise ValueError(f'Invalid model: {model}. Supported: DPhysics')
         return states_pred, traj_costs
@@ -162,22 +161,18 @@ class Demo:
 
     @torch.inference_mode()
     def run(self, vis=False):
-        # create output folder
-        os.makedirs(self.output_folder, exist_ok=True)
-
         img_H, img_W = self.lss_config['data_aug_conf']['H'], self.lss_config['data_aug_conf']['W']
         cams = ['cam_left', 'cam_front', 'cam_right', 'cam_rear']
 
-        # Define a custom colormap from Green -> Yellow -> Red
+        # Define a custom colormap from Green -> Red
         colors = ["green", "red"]
         custom_cmap = LinearSegmentedColormap.from_list("green_red", colors, N=self.dphys_cfg.n_sim_trajs)
 
-        R90 = np.array([[0, 1],
-                        [-1, 0]])
+        R = np.array([[-1, 0],
+                      [ 0, -1]])
+        TRAJ_COST_MIN = np.inf
+        TRAJ_COST_MAX = -np.inf
         for i, batch in enumerate(tqdm(self.loader)):
-            # if os.path.exists(f'{self.output_folder}/{i:04d}.png'):
-            #     continue
-            t0 = time()
             batch = [t.to(self.device) for t in batch]
 
             # terrain prediction
@@ -186,10 +181,11 @@ class Demo:
                                                               terrain['diff'], terrain['friction'])
             # trajectory prediction loss: xyz and rotation
             states_pred, traj_costs = self.predict_states(terrain, batch)
-            traj_costs_norm = (traj_costs - traj_costs.min()) / (traj_costs.max() - traj_costs.min())
+            TRAJ_COST_MIN = min(TRAJ_COST_MIN, traj_costs.min().item())
+            TRAJ_COST_MAX = max(TRAJ_COST_MAX, traj_costs.max().item())
+            # print(TRAJ_COST_MIN, TRAJ_COST_MAX)
+            traj_costs_norm = (traj_costs - TRAJ_COST_MIN) / (TRAJ_COST_MAX - TRAJ_COST_MIN)
             traj_colors = custom_cmap(traj_costs_norm.cpu().numpy())[..., :3][:, ::-1]
-            t1 = time()
-            print(f'Prediction time: {t1 - t0:.2f} s')
 
             # visualizations
             H_t_pred = H_t_pred[0, 0].cpu()
@@ -209,46 +205,54 @@ class Demo:
             imgs_vis = []
             for imgi, img in enumerate(imgs[0][:3]):
                 showimg = np.asarray(denormalize_img(img))
+                h, w = showimg.shape[:2]
                 showimg = cv2.cvtColor(showimg, cv2.COLOR_RGB2BGR)
-                # project trajectory points on the image
-                cam_pts_Xs_pred = ego_to_cam(Xs_pred[:, :, :3].reshape(-1, 3).T, rots[0, imgi], trans[0, imgi], intrins[0, imgi])
-                mask_img_Xs_pred = get_only_in_img_mask(cam_pts_Xs_pred, img_H, img_W)
-                plot_pts_Xs_pred = post_rots[0, imgi].matmul(cam_pts_Xs_pred) + post_trans[0, imgi].unsqueeze(1)
+                # add text: name of the camera in the top-middle of the image
+                cv2.putText(showimg, cams[imgi], (w//2, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
-                for i in torch.where(mask_img_Xs_pred)[0]:
-                    traj_i = int(i // (self.dphys_cfg.traj_sim_time // self.dphys_cfg.dt)) - 1
+                # project trajectory points on the image
+                for traj_i in range(len(Xs_pred)):
+                    cam_pts_Xs_pred = ego_to_cam(Xs_pred[traj_i, :, :3].reshape(-1, 3).T,
+                                                 rots[0, imgi], trans[0, imgi], intrins[0, imgi])
+                    mask_img_Xs_pred = get_only_in_img_mask(cam_pts_Xs_pred, img_H, img_W)
+                    plot_pts_Xs_pred = post_rots[0, imgi].matmul(cam_pts_Xs_pred) + post_trans[0, imgi].unsqueeze(1)
                     color = traj_colors[traj_i] * 255
-                    uv = plot_pts_Xs_pred[:, i]
-                    cv2.circle(showimg, (int(uv[0]), int(uv[1])), 2, color, -1)
+                    for uv in plot_pts_Xs_pred[:, mask_img_Xs_pred].T:
+                        cv2.circle(showimg, (int(uv[0]), int(uv[1])), 2, color, -1)
+
                 imgs_vis.append(showimg)
+
             # concatenate images
             img_vis = np.concatenate(imgs_vis, axis=1)
             terrain_vis = H_t_pred.cpu().numpy()
             terrain_vis = np.flipud(np.fliplr(terrain_vis))
+            friction_vis = Friction_pred.cpu().numpy()
+            friction_vis = np.flipud(np.fliplr(friction_vis))
+            assert friction_vis.shape == terrain_vis.shape
             h, w = terrain_vis.shape
-            terrain_vis = terrain_vis[:h//3*2, :]
+            terrain_vis = terrain_vis[:h//2, :]
+            friction_vis = friction_vis[:h//2, :]
             # add color to terrain
             terrain_vis = cv2.applyColorMap((normalize(terrain_vis) * 255).astype(np.uint8), cv2.COLORMAP_JET)
+            friction_vis = cv2.applyColorMap((normalize(friction_vis) * 255).astype(np.uint8), cv2.COLORMAP_JET)
             # plot the predicted trajectory as lines
             for traj_i in range(len(Xs_pred)):
-                Xs_pred_vis = (Xs_pred[traj_i, :, :2] @ R90 + self.dphys_cfg.d_max) / grid_res
+                Xs_pred_vis = (Xs_pred[traj_i, :, :2] @ R + self.dphys_cfg.d_max) / grid_res
                 Xs_pred_vis = Xs_pred_vis.cpu().numpy().astype(np.int32)
                 # color based on cost small (green) to large (red)
                 color = traj_colors[traj_i] * 255
                 for j in range(1, len(Xs_pred_vis)):
-                    cv2.line(terrain_vis, tuple(Xs_pred_vis[j-1]), tuple(Xs_pred_vis[j]), color, 1)
-            terrain_vis = cv2.resize(terrain_vis, (img_vis.shape[1], img_vis.shape[1]//3*2), interpolation=cv2.INTER_NEAREST)
+                    cv2.line(terrain_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
+                    cv2.line(friction_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
+            terrain_vis = cv2.resize(terrain_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
+            friction_vis = cv2.resize(friction_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
+            terrain_vis = np.concatenate([terrain_vis, friction_vis], axis=1)
             # concatenate images and terrain
             res_vis = np.concatenate([img_vis, terrain_vis], axis=0)
-            res_vis = cv2.resize(res_vis, (res_vis.shape[1]//2, res_vis.shape[0]//2), interpolation=cv2.INTER_NEAREST)
-
-            cv2.imshow('Predictions', res_vis)
-            # cv2.waitKey(0)
-            # break
-            if cv2.waitKey(1) & 0xFF == ord('q'):
-                break
-            t2 = time()
-            print(f'Visualization time: {t2 - t1:.2f} s')
+            # cv2.imshow('Predictions', res_vis)
+            # if cv2.waitKey(1) & 0xFF == ord('q'):
+            #     break
+            self.video_writer.write(res_vis)
         cv2.destroyAllWindows()
 
 
