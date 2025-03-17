@@ -1,24 +1,41 @@
 import sys
-sys.path.append('../src')
 sys.path.append('../../monoforce/monoforce/src')
-from dataproc.imgproc import ego_to_cam, get_only_in_img_mask
+from monoforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_mask
 from monoforce.datasets.wildscenes import METAINFO as WILDSCENES_METAINFO
 from monoforce.datasets.rough import ROUGH, rough_seq_paths
-from monoforce.datasets.coco import COCO_CLASSES
-from monoforce.utils import normalize, explore_data
+from monoforce.utils import normalize
 from monoforce.transformations import position
-from monoforce.imgproc import undistort_image
 import numpy as np
 import open3d as o3d
 import matplotlib.pyplot as plt
 import torch
-import matplotlib as mpl
 import matplotlib.patches as mpatches
-mpl.use('TkAgg')
+import cv2
+
+
+def undistort_image(image, camera_matrix, distortion_coeffs):
+    """
+    Undistort image using camera matrix and distortion coefficients.
+    Reference: https://docs.opencv.org/4.x/dc/dbb/tutorial_py_calibration.html
+    """
+    # Get the image size
+    h, w = image.shape[:2]
+
+    # Generate new camera matrix from parameters
+    new_camera_matrix, roi = cv2.getOptimalNewCameraMatrix(camera_matrix, distortion_coeffs, (w, h), 1, (w, h))
+
+    # Undistort the image
+    undistorted_image = cv2.undistort(image, camera_matrix, distortion_coeffs, None, new_camera_matrix)
+
+    # Crop the image (optional)
+    x, y, w, h = roi
+    undistorted_image = undistorted_image[y:y + h, x:x + w]
+
+    return undistorted_image, new_camera_matrix
 
 
 def segment_cloud():
-    path = rough_seq_paths[2]
+    path = rough_seq_paths[1]
     sample_i = 47
     void_id = 255
 
