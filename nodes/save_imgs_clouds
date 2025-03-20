@@ -70,7 +70,7 @@ class DataProc:
         assert isinstance(msg, CameraInfo)
 
         time = rospy.Time(0)
-        timeout = rospy.Duration.from_sec(1.0)
+        timeout = rospy.Duration.from_sec(5.0)
         try:
             tf = self.tf_buffer.lookup_transform(self.robot_frame, msg.header.frame_id, time, timeout)
         except Exception as ex:

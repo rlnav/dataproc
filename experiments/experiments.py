@@ -21,7 +21,7 @@ def visualize_point_cloud_map():
             print(f'Path {path} does not exist')
             continue
         ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
-        poses = ds.get_poses()
+        poses = ds.get_all_poses()
 
         map_path = os.path.join(path, 'global_cloud.pcd')
         assert os.path.exists(map_path)
@@ -154,7 +154,7 @@ def vis_trajectory():
     paths = rough_seq_paths['husky']
     for path in paths:
         ds = ROUGH(path, lss_cfg=lss_cfg, dphys_cfg=dphys_cfg)
-        poses = ds.get_poses()
+        poses = ds.get_all_poses()
 
         mlab.figure(size=(800, 800))
         draw_coord_frames(poses[::5], scale=0.5)
