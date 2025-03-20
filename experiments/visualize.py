@@ -8,10 +8,22 @@ mpl.use('Qt5Agg')
 
 def visualize_rough():
     # paths = rough_seq_paths
-    paths = [
-        '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/marv_2025-03-19-14-41-19/'
-    ]
+    paths = sorted([os.path.join('../data/ROUGH/', f) for f in os.listdir('../data/ROUGH/') if f.startswith('marv_2025-03-19-')])
+        
     for path in paths:
+        if 'marv_2025-03-19-15-03-51' in path:  # no slam poses
+            continue
+        if 'marv_2025-03-19-14-41-19' in path:  # no slam poses
+            continue
+        if 'marv_2025-03-19-14-45-10' in path:  # no controls
+            continue
+        if 'marv_2025-03-19-15-20-04' in path:  # no controls
+            continue
+        if 'marv_2025-03-19-15-33-00' in path:  # no slam poses
+            continue
+        if 'marv_2025-03-19-14-45-10' in path:
+            print('Possible control/lidar time stamp issue')
+            
         assert os.path.isdir(path), 'Data path %s does not exist' % path
         ds = ROUGH(path, is_train=False)
         # ds.get_global_cloud(vis=True, cached=False, step=10)

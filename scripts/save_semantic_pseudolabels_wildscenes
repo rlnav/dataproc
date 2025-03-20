@@ -14,8 +14,7 @@ def main():
     checkpoint_path = '../packages/WildScenes/pretrained_models/deeplabv3_wildscenes.pth'
     model = init_model(config_path, checkpoint_path)
     # paths = rough_seq_paths
-    dir_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/'
-    paths = [os.path.join(dir_path, f) for f in os.listdir(dir_path) if f.startswith('marv_2025-03-19-')]
+    paths = sorted([os.path.join('../data/ROUGH/', f) for f in os.listdir('../data/ROUGH/') if f.startswith('marv_2025-03-19-')])
     # print(paths)
 
     for seq_path in tqdm(paths):
