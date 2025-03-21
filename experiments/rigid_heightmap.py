@@ -1,11 +1,14 @@
 from monoforce.datasets import ROUGH, rough_seq_paths
 from monoforce.models.traj_predictor.dphys_config import DPhysConfig
-from monoforce.utils import read_yaml, normalize
+from monoforce.utils import read_yaml, normalize, explore_data
 from monoforce.cloudproc import hm_to_cloud, position
 import numpy as np
 import open3d as o3d
 import matplotlib as mpl
-mpl.use('Qt5Agg')
+try:
+    mpl.use('Qt5Agg')
+except:
+    mpl.use('TkAgg')
 
 dphys_cfg = DPhysConfig()
 lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
@@ -52,14 +55,15 @@ def segmentation_test():
 
 
 def rough_test():
-    seq_i = 2  #np.random.choice(len(rough_seq_paths))
+    seq_i = 8  #np.random.choice(len(rough_seq_paths))
     print(f'Path sequence id: {seq_i}')
     path = rough_seq_paths[seq_i]
     ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
     # ds = ds[np.random.choice(len(ds), 32, replace=False)]
 
-    sample_i = 55  # np.random.choice(range(len(ds)))
+    sample_i = 406  # np.random.choice(range(len(ds)))
     print('Sample index:', sample_i)
+    explore_data(ds, [sample_i])
     sample = ds[sample_i]
     (imgs, rots, trans, intrins, post_rots, post_trans,
      hm_geom, hm_terrain,
