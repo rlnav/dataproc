@@ -4,6 +4,7 @@ import sys
 sys.path.append('../../monoforce/monoforce/src/')
 from tqdm import tqdm
 from matplotlib.colors import LinearSegmentedColormap
+from scipy.spatial.transform import Rotation
 import os
 import numpy as np
 import cv2
@@ -14,11 +15,8 @@ from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.models.traj_predictor.dphysics import DPhysics
 from monoforce.models.terrain_encoder.lss import LiftSplatShoot
 from monoforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_mask, denormalize_img
-from monoforce.utils import read_yaml, compile_data, str2bool, normalize
+from monoforce.utils import read_yaml, compile_data, str2bool, normalize, timing
 from monoforce.datasets import ROUGH, rough_seq_paths
-
-np.random.seed(42)
-torch.manual_seed(42)
 
 
 def arg_parser():
@@ -143,9 +141,13 @@ class Demo:
                                                            # state=state0,
                                                            friction=friction.squeeze(1).repeat(n_trajs, 1, 1),
                                                            controls=controls)
-            N_forces = forces_pred[0]  # (n_trajs, time_horizon, n_pts, 3)
-            traj_costs = N_forces.norm(dim=-1).mean(dim=-1).std(dim=-1)
-            # traj_costs = N_forces.norm(dim=-1).mean(dim=-1).max(dim=-1)[0]
+            # N_forces = forces_pred[0]  # (n_trajs, time_horizon, n_pts, 3)
+            Rs_pred = states_pred[2].cpu().reshape(-1, 3, 3)  # (n_trajs * time_horizon, 3, 3)
+            rpy = torch.as_tensor(Rotation.from_matrix(Rs_pred).as_euler('xyz'))  # (n_trajs * time_horizon, 3)
+            roll, pitch = rpy[:, 0].reshape(n_trajs, -1), rpy[:, 1].reshape(n_trajs, -1)  # (n_trajs, time_horizon)
+            angle_costs = roll.abs().mean(dim=-1) + pitch.abs().mean(dim=-1)  # (n_trajs,)
+            # force_costs = N_forces.norm(dim=-1).mean(dim=-1).std(dim=-1).cpu()  # (n_trajs,)
+            traj_costs = angle_costs #+ force_costs  # (n_trajs,)
         else:
             raise ValueError(f'Invalid model: {model}. Supported: DPhysics')
         return states_pred, traj_costs
@@ -168,8 +170,6 @@ class Demo:
         colors = ["green", "red"]
         custom_cmap = LinearSegmentedColormap.from_list("green_red", colors, N=self.dphys_cfg.n_sim_trajs)
 
-        R = np.array([[-1, 0],
-                      [ 0, -1]])
         TRAJ_COST_MIN = np.inf
         TRAJ_COST_MAX = -np.inf
         for i, batch in enumerate(tqdm(self.loader)):
@@ -181,8 +181,10 @@ class Demo:
                                                               terrain['diff'], terrain['friction'])
             # trajectory prediction loss: xyz and rotation
             states_pred, traj_costs = self.predict_states(terrain, batch)
-            TRAJ_COST_MIN = min(TRAJ_COST_MIN, traj_costs.min().item())
-            TRAJ_COST_MAX = max(TRAJ_COST_MAX, traj_costs.max().item())
+            # TRAJ_COST_MIN = min(TRAJ_COST_MIN, traj_costs.min().item())
+            # TRAJ_COST_MAX = max(TRAJ_COST_MAX, traj_costs.max().item())
+            TRAJ_COST_MIN = traj_costs.min().item()
+            TRAJ_COST_MAX = traj_costs.max().item()
             # print(TRAJ_COST_MIN, TRAJ_COST_MAX)
             traj_costs_norm = (traj_costs - TRAJ_COST_MIN) / (TRAJ_COST_MAX - TRAJ_COST_MIN)
             traj_colors = custom_cmap(traj_costs_norm.cpu().numpy())[..., :3][:, ::-1]
@@ -237,7 +239,7 @@ class Demo:
             friction_vis = cv2.applyColorMap((normalize(friction_vis) * 255).astype(np.uint8), cv2.COLORMAP_JET)
             # plot the predicted trajectory as lines
             for traj_i in range(len(Xs_pred)):
-                Xs_pred_vis = (Xs_pred[traj_i, :, :2] @ R + self.dphys_cfg.d_max) / grid_res
+                Xs_pred_vis = (Xs_pred[traj_i, :, :2] @ np.array([[-1, 0], [0, -1]]) + self.dphys_cfg.d_max) / grid_res
                 Xs_pred_vis = Xs_pred_vis.cpu().numpy().astype(np.int32)
                 # color based on cost small (green) to large (red)
                 color = traj_colors[traj_i] * 255
@@ -254,6 +256,7 @@ class Demo:
 
             if vis:
                 cv2.imshow('Predictions', res_vis)
+                # cv2.waitKey(0)
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             else:
