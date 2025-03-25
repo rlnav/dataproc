@@ -7,9 +7,9 @@ marv_obj = "/home/ruslan/workspaces/traversability_ws/src/monoforce/monoforce/co
 robot_mesh = pv.read(marv_obj)
 
 # Create a 2D grid (Heightmap)
-grid_size = 50
-x = np.linspace(-5, 5, grid_size)
-y = np.linspace(-5, 5, grid_size)
+grid_size = 128
+x = np.linspace(-6.4, 6.4, grid_size)
+y = np.linspace(-6.4, 6.4, grid_size)
 X, Y = np.meshgrid(x, y)
 Z = np.sin(X ** 2 + Y ** 2)  # Example height function
 
@@ -40,4 +40,5 @@ for i in range(num_steps):
     plotter.render()  # Refresh the plot
     time.sleep(0.05)  # Adjust speed
 
+plotter.show()
 plotter.close()
