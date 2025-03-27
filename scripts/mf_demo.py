@@ -4,7 +4,6 @@ import sys
 sys.path.append('../../monoforce/monoforce/src/')
 from tqdm import tqdm
 from matplotlib.colors import LinearSegmentedColormap
-from scipy.spatial.transform import Rotation
 import os
 import numpy as np
 import cv2
@@ -45,10 +44,12 @@ def generate_controls(n_trajs=10,
     - Linear and angular velocities for the robot trajectories: (n_trajs, time_steps, 2).
     """
     N = int(time_horizon / dt)
-    ws = torch.stack([torch.linspace(w_range[0], w_range[1], n_trajs // 2),
-                      torch.linspace(w_range[1], w_range[0], n_trajs//2)]).flatten()
-    vs = torch.stack([v * torch.ones(n_trajs // 2),
-                      -v * torch.ones(n_trajs // 2)]).flatten()
+    # ws = torch.stack([torch.linspace(w_range[0], w_range[1], n_trajs // 2),
+    #                   torch.linspace(w_range[1], w_range[0], n_trajs//2)]).flatten()
+    # vs = torch.stack([v * torch.ones(n_trajs // 2),
+    #                   -v * torch.ones(n_trajs // 2)]).flatten()
+    ws = torch.linspace(w_range[0], w_range[1], n_trajs).flatten()
+    vs = v * torch.ones(n_trajs).flatten()
 
     # repeat the controls for each time step
     vs = vs.unsqueeze(1).repeat(1, N)
@@ -78,8 +79,8 @@ class Demo:
         self.dphys_cfg = DPhysConfig(robot=robot)
         self.dphys_cfg.vel_max = 1.0
         self.dphys_cfg.omega_max = 1.0
-        self.dphys_cfg.traj_sim_time = 8.0
-        self.dphys_cfg.n_sim_trajs = 32
+        self.dphys_cfg.traj_sim_time = 7.0
+        self.dphys_cfg.n_sim_trajs = 16
         self.traj_predictor = self.get_traj_pred(model=traj_predictor)
 
         # load LSS config
@@ -141,13 +142,8 @@ class Demo:
                                                            # state=state0,
                                                            friction=friction.squeeze(1).repeat(n_trajs, 1, 1),
                                                            controls=controls)
-            # N_forces = forces_pred[0]  # (n_trajs, time_horizon, n_pts, 3)
-            Rs_pred = states_pred[2].cpu().reshape(-1, 3, 3)  # (n_trajs * time_horizon, 3, 3)
-            rpy = torch.as_tensor(Rotation.from_matrix(Rs_pred).as_euler('xyz'))  # (n_trajs * time_horizon, 3)
-            roll, pitch = rpy[:, 0].reshape(n_trajs, -1), rpy[:, 1].reshape(n_trajs, -1)  # (n_trajs, time_horizon)
-            angle_costs = roll.abs().mean(dim=-1) + pitch.abs().mean(dim=-1)  # (n_trajs,)
-            # force_costs = N_forces.norm(dim=-1).mean(dim=-1).std(dim=-1).cpu()  # (n_trajs,)
-            traj_costs = angle_costs #+ force_costs  # (n_trajs,)
+            omegas_pred = states_pred[3]  # (n_trajs, time_horizon, 3)
+            traj_costs = omegas_pred[:, :, :2].norm(dim=-1).mean(dim=-1)  # (n_trajs,)
         else:
             raise ValueError(f'Invalid model: {model}. Supported: DPhysics')
         return states_pred, traj_costs
