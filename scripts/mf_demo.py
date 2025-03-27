@@ -91,10 +91,10 @@ class Demo:
         self.loader = self.get_dataloader(batch_size=batch_size, seq=seq)
 
         # output video file to write results
-        self.output_video = f'./gen/demo_{os.path.basename(seq)}.avi'
+        self.output_video = f'./gen/demo_{os.path.basename(seq)}.mp4'
         # create output folder
         os.makedirs('./gen/', exist_ok=True)
-        self.video_writer = cv2.VideoWriter(self.output_video, cv2.VideoWriter_fourcc(*'XVID'), 10, (1248, 568))
+        self.video_writer = cv2.VideoWriter(self.output_video, cv2.VideoWriter_fourcc(*'mp4v'), 10, (1248, 568))
 
     def get_terrain_encoder(self, path, model='lss'):
         if model == 'lss':
