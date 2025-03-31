@@ -115,18 +115,26 @@ def process_bag(bagfile, cloud_times):
                 print('Could not transform from %s to %s at %.3f s.' % (pcd_msg.header.frame_id, robot_frame, t))
                 continue
             tf = numpify(tf.transform)
-            print(tf.shape)
+            # print(tf.shape)
             input_to_robot_tfs.append(tf)
 
-        # # visualization
-        # pcd = o3d.geometry.PointCloud()
-        # pcd.points = o3d.utility.Vector3dVector(points)
-        # pcd.transform(input_to_fixed)
-        #
-        # pose_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=2.0)
-        # pose_frame.transform(input_to_fixed)
-        #
-        # o3d.visualization.draw_geometries([pcd, pose_frame])
+        # visualization
+        pcd = o3d.geometry.PointCloud()
+        pcd.points = o3d.utility.Vector3dVector(points)
+        pcd.transform(input_to_fixed)
+
+        fixed_to_robots = []
+        pose_frames = []
+        for input_to_robot in input_to_robot_tfs:
+            fixed_to_robot = input_to_fixed @ np.linalg.inv(input_to_robot)
+            fixed_to_robots.append(fixed_to_robot)
+
+            pose_frame = o3d.geometry.TriangleMesh.create_coordinate_frame(size=1.0)
+            pose_frame.transform(fixed_to_robot)
+            pose_frames.append(pose_frame)
+
+        o3d.visualization.draw_geometries(pose_frames + [pcd])
+        break
     bag.close()
     print("Processing complete.")
 
@@ -139,12 +147,12 @@ def to_sec(file_name):
 
 
 if __name__ == "__main__":
-    # bagfile = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive.bag'
-    bagfile = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"
+    # bag_file = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive.bag'
+    bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"
 
-    seq = f"../data/ROUGH/{bagfile.split('/')[-1].split('.')[0]}"
+    seq = f"../data/ROUGH/{bag_file.split('/')[-1].split('.')[0]}"
     clouds_path = os.path.join(seq, "clouds")
     cloud_files = sorted(os.listdir(clouds_path))
     cloud_stamps = [to_sec(f) for f in cloud_files]
 
-    process_bag(bagfile, cloud_stamps)
+    process_bag(bag_file, cloud_stamps)
