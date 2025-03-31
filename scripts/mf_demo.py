@@ -129,12 +129,12 @@ class Demo:
         if model == 'DPhysics':
             controls = generate_controls(n_trajs=n_trajs, time_horizon=T, v=v, w_range=(-w, w))
             controls = controls.to(self.device)
-            # Xs, Xds, Rs, Omegas = batch[12:16]
-            # state0 = tuple([s[:, 0] for s in [Xs.repeat(n_trajs, 1, 1), Xds.repeat(n_trajs, 1, 1),
-            #                                   Rs.repeat(n_trajs, 1, 1, 1), Omegas.repeat(n_trajs, 1, 1)]])
+            Xs, Xds, Rs, Omegas = batch[12:16]
+            state0 = tuple([s[:, 0] for s in [Xs.repeat(n_trajs, 1, 1), Xds.repeat(n_trajs, 1, 1),
+                                              Rs.repeat(n_trajs, 1, 1, 1), Omegas.repeat(n_trajs, 1, 1)]])
             height, friction = terrain['terrain'], terrain['friction']
             states_pred, forces_pred = self.physics_engine(z_grid=height.squeeze(1).repeat(n_trajs, 1, 1),
-                                                           # state=state0,
+                                                           state=state0,
                                                            friction=friction.squeeze(1).repeat(n_trajs, 1, 1),
                                                            controls=controls)
             omegas_pred = states_pred[3]  # (n_trajs, time_horizon, 3)
@@ -161,8 +161,6 @@ class Demo:
         colors = ["green", "red"]
         custom_cmap = LinearSegmentedColormap.from_list("green_red", colors, N=self.dphys_cfg.n_sim_trajs)
 
-        TRAJ_COST_MIN = np.inf
-        TRAJ_COST_MAX = -np.inf
         for i, batch in enumerate(tqdm(self.loader)):
             batch = [t.to(self.device) for t in batch]
 
@@ -170,13 +168,13 @@ class Demo:
             terrain = self.predict_terrain(batch)
             H_t_pred, H_g_pred, H_diff_pred, Friction_pred = (terrain['terrain'], terrain['geom'],
                                                               terrain['diff'], terrain['friction'])
+            # rigid_mask = H_diff_pred < torch.quantile(H_diff_pred, 0.6)
+            rigid_mask = batch[6][:, 1:2].bool()
+            terrain['terrain'][rigid_mask] = batch[7][:, :1][rigid_mask]
             # trajectory prediction loss: xyz and rotation
             states_pred, traj_costs = self.predict_states(terrain, batch)
-            # TRAJ_COST_MIN = min(TRAJ_COST_MIN, traj_costs.min().item())
-            # TRAJ_COST_MAX = max(TRAJ_COST_MAX, traj_costs.max().item())
             TRAJ_COST_MIN = traj_costs.min().item()
             TRAJ_COST_MAX = traj_costs.max().item()
-            # print(TRAJ_COST_MIN, TRAJ_COST_MAX)
             traj_costs_norm = (traj_costs - TRAJ_COST_MIN) / (TRAJ_COST_MAX - TRAJ_COST_MIN)
             traj_colors = custom_cmap(traj_costs_norm.cpu().numpy())[..., :3][:, ::-1]
 
