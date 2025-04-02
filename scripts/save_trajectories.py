@@ -54,10 +54,16 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
             self.omegas = []
 
             self.js_stamps = []
+
             self.fl_flipper_angles = []
             self.fr_flipper_angles = []
             self.rl_flipper_angles = []
             self.rr_flipper_angles = []
+
+            self.fl_flipper_ws = []
+            self.fr_flipper_ws = []
+            self.rl_flipper_ws = []
+            self.rr_flipper_ws = []
 
             self.robot_model = RobotModelConfig()
 
@@ -77,10 +83,16 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
                 if topic == joint_states_topic:
                     js_msg = JointState(*slots(msg))
                     self.js_stamps.append(js_msg.header.stamp.to_sec())
+
                     self.fl_flipper_angles.append(js_msg.position[0])
                     self.fr_flipper_angles.append(js_msg.position[1])
                     self.rl_flipper_angles.append(js_msg.position[2])
                     self.rr_flipper_angles.append(js_msg.position[3])
+
+                    self.fl_flipper_ws.append(js_msg.velocity[0])
+                    self.fr_flipper_ws.append(js_msg.velocity[1])
+                    self.rl_flipper_ws.append(js_msg.velocity[2])
+                    self.rr_flipper_ws.append(js_msg.velocity[3])
 
         def get_vws(self, time_left, time_right):
             """Get cmd vel values for the given time window."""
@@ -91,27 +103,43 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
             omegas = self.omegas[left_idx:right_idx]
             return ts, vels, omegas
 
-        def get_js(self, time_left, time_right):
-            """Get joint state values for the given time window."""
+        def get_flipper_angles(self, t_des):
+            """Get flipper angle values for the given time moment."""
+            idx = np.searchsorted(self.js_stamps, t_des)
+            t = self.js_stamps[idx]
+            fl_flipper_angle = self.fl_flipper_angles[idx]
+            fr_flipper_angle = self.fr_flipper_angles[idx]
+            rl_flipper_angle = self.rl_flipper_angles[idx]
+            rr_flipper_angle = self.rr_flipper_angles[idx]
+            flipper_angles = np.array([
+                fl_flipper_angle,
+                fr_flipper_angle,
+                rl_flipper_angle,
+                rr_flipper_angle
+            ])  # (4,)
+            return t, flipper_angles
+
+        def get_flipper_ws(self, time_left, time_right):
+            """Get flipper angular velocity values for the given time window."""
             left_idx = np.searchsorted(self.js_stamps, time_left)
             right_idx = np.searchsorted(self.js_stamps, time_right)
             ts = self.js_stamps[left_idx:right_idx]
-            fl_flipper_angles = self.fl_flipper_angles[left_idx:right_idx]
-            fr_flipper_angles = self.fr_flipper_angles[left_idx:right_idx]
-            rl_flipper_angles = self.rl_flipper_angles[left_idx:right_idx]
-            rr_flipper_angles = self.rr_flipper_angles[left_idx:right_idx]
-            flipper_angles = np.stack([
-                fl_flipper_angles,
-                fr_flipper_angles,
-                rl_flipper_angles,
-                rr_flipper_angles
+            fl_flipper_ws = self.fl_flipper_ws[left_idx:right_idx]
+            fr_flipper_ws = self.fr_flipper_ws[left_idx:right_idx]
+            rl_flipper_ws = self.rl_flipper_ws[left_idx:right_idx]
+            rr_flipper_ws = self.rr_flipper_ws[left_idx:right_idx]
+            flipper_ws = np.stack([
+                fl_flipper_ws,
+                fr_flipper_ws,
+                rl_flipper_ws,
+                rr_flipper_ws
             ]).T  # (4, N) -> (N, 4)
-            return ts, flipper_angles
+            return ts, flipper_ws
 
         def get_controls(self, time_left, time_right, step=0.01):
             """Get control values for the given time window."""
             ts_cmd_vel, vels, omegas = self.get_vws(time_left, time_right)
-            ts_js, flipper_angles = self.get_js(time_left, time_right)
+            ts_js, flipper_ws = self.get_flipper_ws(time_left, time_right)
 
             ts_interp = np.arange(time_left, time_right, step)
             controls_interp = np.zeros((len(ts_interp), self.robot_model.num_driving_parts * 2))
@@ -123,7 +151,7 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
                     if i < self.robot_model.num_driving_parts:
                         controls_interp[:, i] = np.interp(ts_interp, ts_cmd_vel, flipper_vels[:, i])
                     else:
-                        controls_interp[:, i] = np.interp(ts_interp, ts_js, flipper_angles[:, i - self.robot_model.num_driving_parts])
+                        controls_interp[:, i] = np.interp(ts_interp, ts_js, flipper_ws[:, i - self.robot_model.num_driving_parts])
             return ts_interp, controls_interp
 
     control_buffer = ControlBuffer()
@@ -184,19 +212,6 @@ def process_bag(bag_file, cloud_times,
     tf_buffer = load_tf_buffer(bag)
     control_buffer = load_control_buffer(bag, cmd_vel_topic, joint_states_topic)
 
-    # plt.figure(figsize=(12, 8))
-    # plt.plot(control_buffer.cmd_vel_stamps, control_buffer.vels, 'r', label='v(t)')
-    # # plt.plot(control_buffer.cmd_vel_stamps, control_buffer.omegas, 'b', label='w(t)')
-    # plt.plot(control_buffer.js_stamps, control_buffer.fl_flipper_angles, 'g', label='fl flipper angles')
-    # # plt.plot(control_buffer.js_stamps, control_buffer.fr_flipper_angles, 'y', label='fr flipper angles')
-    # # plt.plot(control_buffer.js_stamps, control_buffer.rl_flipper_angles, 'c', label='rl flipper angles')
-    # # plt.plot(control_buffer.js_stamps, control_buffer.rr_flipper_angles, 'm', label='rr flipper angles')
-    # plt.xlabel('Time (s)')
-    # plt.ylabel('Control values')
-    # plt.legend()
-    # plt.grid()
-    # plt.show()
-
     n = [int(np.floor(h / time_step)) for h in time_horizon]
 
     for cloud_time in tqdm(cloud_times):
@@ -242,22 +257,43 @@ def process_bag(bag_file, cloud_times,
         time_left = start + time_horizon[0]
         time_right = start + time_horizon[1]
         control_ts, controls = control_buffer.get_controls(time_left, time_right, step=0.01)
+        theta0 = control_buffer.get_flipper_angles(traj_ts[0])[1]
         print(points.shape, len(control_ts), len(controls), len(traj_ts), len(fixed_to_robot_tfs))
 
         if np.random.random() < 0.05:
             ts, vels, omegas = control_buffer.get_vws(time_left, time_right)
-            plt.figure(figsize=(12, 8))
+            plt.figure(figsize=(16, 8))
+            plt.subplot(121)
             plt.plot(ts, vels, 'r', label='v(t)')
             plt.plot(ts, omegas, 'b', label='w(t)')
             plt.xlabel('Time (s)')
-            plt.ylabel('Control values')
+            plt.ylabel('Cmd vels [m/s] or [rad/s]')
+            plt.legend()
+            plt.grid()
+
+            plt.subplot(122)
+            ts_js, flipper_ws = control_buffer.get_flipper_ws(time_left, time_right)
+            plt.plot(ts_js, flipper_ws[:, 0], 'g', label='fl flipper ws')
+            plt.plot(ts_js, flipper_ws[:, 1], 'y', label='fr flipper ws')
+            plt.plot(ts_js, flipper_ws[:, 2], 'c', label='rl flipper ws')
+            plt.plot(ts_js, flipper_ws[:, 3], 'm', label='rr flipper ws')
+            plt.xlabel('Time (s)')
+            plt.ylabel('Joint states vels [rad/s]')
             plt.legend()
             plt.grid()
             plt.show()
 
             show_cloud_and_path(points, fixed_to_robot_tfs, input_to_fixed)
 
-            motion(controls, points, fixed_to_robot_tfs[0], input_to_fixed)
+            n_robots = 1
+            x0 = torch.tensor([0.0, 0.0, 0.1]).repeat(n_robots, 1)
+            xd0 = torch.zeros_like(x0)
+            q0 = unit_quaternion(batch_size=n_robots)
+            omega0 = torch.zeros_like(x0)
+            thetas0 = torch.as_tensor(theta0).float().repeat(n_robots, 1)
+            state0 = PhysicsState(x0, xd0, q0, omega0, thetas0)
+
+            motion(controls, points, fixed_to_robot_tfs[0], input_to_fixed, state0=state0)
     bag.close()
     print("Processing complete.")
 
@@ -278,7 +314,7 @@ def show_cloud_and_path(points, fixed_to_robot_tfs, input_to_fixed):
     o3d.visualization.draw_geometries(pose_frames + [pcd])
 
 
-def motion(controls, points_input, fixed_to_robot, input_to_fixed):
+def motion(controls, points_input, fixed_to_robot, input_to_fixed, state0: PhysicsState | None = None):
     n_robots = 1
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -316,17 +352,19 @@ def motion(controls, points_input, fixed_to_robot, input_to_fixed):
     engine = DPhysicsEngine(physics_config, robot_model, device)
 
     # Initial state
-    x0 = torch.tensor([0.0, 0.0, 0.1]).to(device).repeat(n_robots, 1)
-    xd0 = torch.zeros_like(x0)
-    q0 = unit_quaternion(batch_size=n_robots, device=device)
-    omega0 = torch.zeros_like(x0)
-    thetas0 = torch.zeros(n_robots, robot_model.num_driving_parts).to(device)
-    init_state = PhysicsState(x0, xd0, q0, omega0, thetas0)
+    if state0 is None:
+        x0 = torch.tensor([0.0, 0.0, 0.1]).repeat(n_robots, 1)
+        xd0 = torch.zeros_like(x0)
+        q0 = unit_quaternion(batch_size=n_robots)
+        omega0 = torch.zeros_like(x0)
+        thetas0 = torch.zeros(n_robots, robot_model.num_driving_parts)
+        state0 = PhysicsState(x0, xd0, q0, omega0, thetas0)
+    state0 = state0.to(device)
 
     states = deque(maxlen=n_iters)
     auxs = deque(maxlen=n_iters)
 
-    state = init_state
+    state = state0
     for i in range(n_iters):
         state, der, aux = engine(state, controls[:, i], world_config)
         states.append(state)
@@ -351,10 +389,10 @@ def to_sec(file_name):
     return seconds
 
 
-if __name__ == "__main__":
-    # bag_file = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive.bag'
-    # bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"
-    bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07.bag"
+def main():
+    # bag_file = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive.bag'
+    bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"
+    # bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07.bag"
 
     seq = f"../data/ROUGH/{bag_file.split('/')[-1].split('.')[0]}"
     clouds_path = os.path.join(seq, "clouds")
@@ -369,3 +407,7 @@ if __name__ == "__main__":
                 cloud_topic='/points_filtered_kontron',
                 cmd_vel_topic='/marv/cartesian_controller/cmd_vel',
                 joint_states_topic='/marv/flippers/joint_states')
+
+
+if __name__ == "__main__":
+    main()
