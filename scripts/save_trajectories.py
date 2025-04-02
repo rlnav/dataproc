@@ -34,7 +34,6 @@ import sys
 sys.path.append('../../monoforce/monoforce/src')
 from monoforce.models.physics_engine.engine.engine import DPhysicsEngine, PhysicsState
 from monoforce.models.physics_engine.utils.geometry import unit_quaternion
-from monoforce.models.physics_engine.engine.engine_state import vectorize_iter_of_states as vectorize_states
 from monoforce.models.physics_engine.vis.animator import animate_trajectory
 from monoforce.models.physics_engine.utils.environment import make_x_y_grids
 from monoforce.configs import RobotModelConfig, WorldConfig, PhysicsEngineConfig
@@ -58,8 +57,8 @@ def load_tf_buffer(bag: Bag):
 
 
 def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
-    assert cmd_vel_topic in bag.get_type_and_topic_info()[1], f"Topic {cmd_vel_topic} not found in bag."
-    assert joint_states_topic in bag.get_type_and_topic_info()[1], f"Topic {joint_states_topic} not found in bag."
+    # assert cmd_vel_topic in bag.get_type_and_topic_info()[1], f"Topic {cmd_vel_topic} not found in bag."
+    # assert joint_states_topic in bag.get_type_and_topic_info()[1], f"Topic {joint_states_topic} not found in bag."
 
     class ControlBuffer(object):
         def __init__(self):
@@ -178,6 +177,7 @@ def slots(msg):
     """Return message attributes (slots) as list."""
     return [getattr(msg, var) for var in msg.__slots__]
 
+
 def get_point_cloud_in_window(bag, target_time, time_window, topic):
     """
     Retrieves the closest PointCloud2 message within a given time window around the target_time.
@@ -208,7 +208,7 @@ def get_point_cloud_in_window(bag, target_time, time_window, topic):
     return closest_msg
 
 
-def process_bag(bag_file, cloud_files,
+def process_bag(bag_path, cloud_files,
                 traj_time_horizon=[0., 10.],
                 robot_frame='base_link',
                 fixed_frame='odom',
@@ -220,16 +220,27 @@ def process_bag(bag_file, cloud_files,
                 vis_prob=0.0,
                 save=False):
     try:
-        bag = Bag(bag_file, 'r')
+        bag = Bag(bag_path, 'r')
     except ROSBagException as ex:
         print(f"Error opening bag file: {ex}")
         return
+    # Check if the topics exist in the bag: control commands and point clouds
+    if not cloud_topic in bag.get_type_and_topic_info()[1]:
+        print(f"Topic {cloud_topic} not found in bag.")
+        return
+    if not cmd_vel_topic in bag.get_type_and_topic_info()[1]:
+        print(f"Topic {cmd_vel_topic} not found in bag.")
+        return
+    if not joint_states_topic in bag.get_type_and_topic_info()[1]:
+        print(f"Topic {joint_states_topic} not found in bag.")
+        return
+
     # Get the time of the point clouds
     cloud_files = sorted(cloud_files)
     cloud_times = [fname_to_sec(f) for f in cloud_files]
     assert np.all(np.diff(cloud_times) > 0), "Cloud files are not sorted by time."
 
-    seq_path = os.path.basename(bag_file.replace('.bag', ''))
+    seq_path = os.path.basename(bag_path.replace('.bag', ''))
     seq_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/', seq_path)
     trajs_path = os.path.join(seq_path, 'trajectories')
     controls_path = os.path.join(seq_path, 'controls')
@@ -241,7 +252,7 @@ def process_bag(bag_file, cloud_files,
 
     n = [int(np.floor(h / traj_time_step)) for h in traj_time_horizon]
 
-    for cloud_i, cloud_time in tqdm(enumerate(cloud_times), desc='Going through clouds stamps'):
+    for cloud_i, cloud_time in tqdm(enumerate(cloud_times), desc='Going through clouds stamps', total=len(cloud_times)):
         pcd_msg = get_point_cloud_in_window(bag, cloud_time,
                                             time_window=cloud_time_search_window,
                                             topic=cloud_topic)
@@ -278,25 +289,41 @@ def process_bag(bag_file, cloud_files,
             tf = numpify(tf.transform)
             input_to_robot_tfs.append(tf)
         input_to_robot_tfs = np.array(input_to_robot_tfs)
+        # robot trajectory is in the fixed frame
         fixed_to_robot_tfs = input_to_fixed @ np.linalg.inv(input_to_robot_tfs)
+        # flipper angles at trajectory timestamps
+        traj_flipper_anles = []
+        for t in traj_ts:
+            t, flipper_angles = control_buffer.get_flipper_angles(t)
+            traj_flipper_anles.append(flipper_angles)
 
         # get robot commanded velocities
         time_left = start + traj_time_horizon[0]
         time_right = start + traj_time_horizon[1]
         control_ts, controls = control_buffer.get_controls(time_left, time_right, step=0.01)
-        theta0 = control_buffer.get_flipper_angles(traj_ts[0])[1]
 
         if save:
             """Save the data"""
-            # trajectory
+            # trajectory: poses
             traj_path = os.path.join(trajs_path,
                                      f'traj_{robot_frame}_{cloud_files[cloud_i]}'.replace('.npz', '.csv'))
             write_to_csv(traj_path, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
-            assert len(traj_ts) == len(fixed_to_robot_tfs), "Trajectory timestamps and transforms length mismatch."
+            assert len(traj_ts) == len(fixed_to_robot_tfs),\
+                f"Trajectory timestamps and transforms length mismatch: {len(traj_ts)} != {len(fixed_to_robot_tfs)}"
             for pose_i in range(len(fixed_to_robot_tfs)):
                 pose = fixed_to_robot_tfs[pose_i]
                 append_to_csv(traj_path,
                               '%.9f, %s\n' % (traj_ts[pose_i], ', '.join(['%.3f' % x for x in pose[:3, :].flatten()])))
+            # trajectory: flipper angles
+            traj_flipper_path = os.path.join(trajs_path,
+                                                f'traj_flipper_angles_{cloud_files[cloud_i]}'.replace('.npz', '.csv'))
+            assert len(traj_ts) == len(traj_flipper_anles),\
+                f"Trajectory timestamps and flipper angles length mismatch: {len(traj_ts)} != {len(traj_flipper_anles)}"
+            write_to_csv(traj_flipper_path, 'stamp, fl_a, fr_a, rl_a, rr_a\n')
+            for angle_i in range(len(traj_flipper_anles)):
+                flipper_angles = traj_flipper_anles[angle_i]
+                append_to_csv(traj_flipper_path,
+                              '%.9f, %s\n' % (traj_ts[angle_i], ', '.join(['%.3f' % x for x in flipper_angles])))
 
             # controls
             control_path = os.path.join(controls_path,
@@ -338,7 +365,7 @@ def process_bag(bag_file, cloud_files,
             xd0 = torch.zeros_like(x0)
             q0 = unit_quaternion(batch_size=n_robots)
             omega0 = torch.zeros_like(x0)
-            thetas0 = torch.as_tensor(theta0).float().repeat(n_robots, 1)
+            thetas0 = torch.as_tensor(traj_flipper_anles[0]).float().repeat(n_robots, 1)
             state0 = PhysicsState(x0, xd0, q0, omega0, thetas0)
 
             motion(controls, points, fixed_to_robot_tfs[0], input_to_fixed, state0=state0)
@@ -418,8 +445,6 @@ def motion(controls, points_input, fixed_to_robot, input_to_fixed, state0: Physi
         states.append(state)
         auxs.append(aux)
 
-    states_vec = vectorize_states(states)
-
     # visualization
     animate_trajectory(
         world_config,
@@ -437,24 +462,36 @@ def fname_to_sec(file_name):
 
 
 def main():
-    # bag_file = '/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-silly_drive.bag'
-    bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"
-    # bag_file = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-10-31-petrin/marv_2024-10-31-15-52-07.bag"
+    from glob import glob
 
-    seq = f"../data/ROUGH/{bag_file.split('/')[-1].split('.')[0]}"
-    clouds_path = os.path.join(seq, "clouds")
-    cloud_files = os.listdir(clouds_path)
+    data_dir = "/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/"
+    bag_paths_glob = glob(os.path.join(data_dir, "*", "*.bag"))
+    bag_paths = []
+    seq_paths = []
+    for bag_path in tqdm(bag_paths_glob):
+        seq_path = f"../data/ROUGH/{os.path.basename(bag_path.replace('.bag', ''))}"
+        # if not already in the list append bag path
+        if bag_path not in bag_paths and os.path.exists(seq_path) and "marv" in bag_path:
+            bag_paths.append(bag_path)
+            seq_paths.append(seq_path)
+    seq_paths = sorted(seq_paths)
+    bag_paths = sorted(bag_paths)
+    print(f"Found {len(bag_paths)} bags.")
+    # bag_paths = ["/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"]
 
-    process_bag(bag_file, cloud_files,
-                traj_time_horizon=[0., 10.],
-                fixed_frame='odom',
-                traj_time_step=0.5,
-                cloud_time_search_window=0.2,
-                cloud_topic='/points_filtered_kontron',
-                cmd_vel_topic='/marv/cartesian_controller/cmd_vel',
-                joint_states_topic='/marv/joint_states',
-                vis_prob=1.0,
-                save=False)
+    for seq_path, bag_path in zip(seq_paths, bag_paths):
+        cloud_files = os.listdir(os.path.join(seq_path, "clouds"))
+        print(f"Processing {bag_path}...")
+        process_bag(bag_path, cloud_files,
+                    traj_time_horizon=[0., 10.],
+                    fixed_frame='map',
+                    traj_time_step=0.5,
+                    cloud_time_search_window=0.2,
+                    cloud_topic='/points_filtered_kontron',
+                    cmd_vel_topic='/marv/cartesian_controller/cmd_vel',
+                    joint_states_topic='/marv/joint_states',
+                    vis_prob=0.0,
+                    save=True)
 
 
 if __name__ == "__main__":
