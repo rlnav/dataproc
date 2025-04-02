@@ -109,8 +109,8 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
 
         def get_vws(self, time_left, time_right):
             """Get cmd vel values for the given time window."""
-            left_idx = np.searchsorted(self.cmd_vel_stamps, time_left)
-            right_idx = np.searchsorted(self.cmd_vel_stamps, time_right)
+            left_idx = np.searchsorted(self.cmd_vel_stamps, time_left).clip(0, len(self.cmd_vel_stamps) - 1)
+            right_idx = np.searchsorted(self.cmd_vel_stamps, time_right).clip(0, len(self.cmd_vel_stamps) - 1)
             ts = self.cmd_vel_stamps[left_idx:right_idx]
             vels = self.vels[left_idx:right_idx]
             omegas = self.omegas[left_idx:right_idx]
@@ -118,7 +118,7 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
 
         def get_flipper_angles(self, t_des):
             """Get flipper angle values for the given time moment."""
-            idx = np.searchsorted(self.js_stamps, t_des)
+            idx = np.searchsorted(self.js_stamps, t_des).clip(0, len(self.js_stamps) - 1)
             t = self.js_stamps[idx]
             fl_flipper_angle = self.fl_flipper_angles[idx]
             fr_flipper_angle = self.fr_flipper_angles[idx]
@@ -134,8 +134,8 @@ def load_control_buffer(bag: Bag, cmd_vel_topic: str, joint_states_topic: str):
 
         def get_flipper_ws(self, time_left, time_right):
             """Get flipper angular velocity values for the given time window."""
-            left_idx = np.searchsorted(self.js_stamps, time_left)
-            right_idx = np.searchsorted(self.js_stamps, time_right)
+            left_idx = np.searchsorted(self.js_stamps, time_left).clip(0, len(self.js_stamps) - 1)
+            right_idx = np.searchsorted(self.js_stamps, time_right).clip(0, len(self.js_stamps) - 1)
             ts = self.js_stamps[left_idx:right_idx]
             fl_flipper_ws = self.fl_flipper_ws[left_idx:right_idx]
             fr_flipper_ws = self.fr_flipper_ws[left_idx:right_idx]
@@ -285,6 +285,9 @@ def process_bag(bag_path, cloud_files,
                                                           fixed_frame)
             except TransformException as ex:
                 print('Could not transform from %s to %s at %.3f s.' % (pcd_msg.header.frame_id, robot_frame, t))
+                print(ex)
+                # remove time without pose from the stamp array
+                traj_ts = traj_ts[traj_ts != t]
                 continue
             tf = numpify(tf.transform)
             input_to_robot_tfs.append(tf)
@@ -477,7 +480,8 @@ def main():
     seq_paths = sorted(seq_paths)
     bag_paths = sorted(bag_paths)
     print(f"Found {len(bag_paths)} bags.")
-    # bag_paths = ["/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/25-03-19-petrin/marv_2025-03-19-15-35-24.bag"]
+    # bag_paths = ["/media/ruslan/VRAS-DATA 4TB 2/outdoor_dataset/24-08-initial_tests_marv/24-08-14-monoforce-long_drive.bag"]
+    # seq_paths = ["../data/ROUGH/24-08-14-monoforce-long_drive"]
 
     for seq_path, bag_path in zip(seq_paths, bag_paths):
         cloud_files = os.listdir(os.path.join(seq_path, "clouds"))
