@@ -1,9 +1,7 @@
 import torch
 from .segmentation import affine
-from .transformations import rot2rpy, rpy2rot
 from .utils import position
 import numpy as np
-from scipy.interpolate import griddata
 
 default_rng = np.random.default_rng(135)
 
@@ -193,89 +191,64 @@ def valid_point_mask(arr, discard_tf=None, discard_model=None):
         valid = np.logical_and(valid, ~discard_model.contains_point(y))
     return valid.reshape(arr.shape)
 
-def estimate_heightmap(points, d_min=1., d_max=12.8, grid_res=0.1, h_max=1., hm_interp_method='nearest',
-                       fill_value=0., robot_radius=None, return_filtered_points=False,
-                       map_pose=np.eye(4)):
-    assert points.ndim == 2
-    assert points.shape[1] >= 3  # (N x 3)
-    assert len(points) > 0
-    assert isinstance(d_min, (float, int)) and d_min >= 0.
-    assert isinstance(d_max, (float, int)) and d_max >= 0.
-    assert isinstance(grid_res, (float, int)) and grid_res > 0.
-    assert isinstance(h_max, (float, int)) and h_max >= 0.
-    assert hm_interp_method in ['linear', 'nearest', 'cubic', None]
-    assert fill_value is None or isinstance(fill_value, (float, int))
-    assert robot_radius is None or isinstance(robot_radius, (float, int)) and robot_radius > 0.
-    assert isinstance(return_filtered_points, bool)
-    assert map_pose.shape == (4, 4)
-
-    # remove invalid points
-    mask_valid = np.isfinite(points).all(axis=1)
-    points = points[mask_valid]
-
-    # gravity aligned points
-    roll, pitch, yaw = rot2rpy(map_pose[:3, :3])
-    R = rpy2rot(roll, pitch, 0.).cpu().numpy()
-    points_grav = points @ R.T
-
-    # height above ground
-    mask_h = points_grav[:, 2] <= h_max
-
-    # filter point cloud in a square
-    mask_sq = np.logical_and(np.abs(points[:, 0]) <= d_max, np.abs(points[:, 1]) <= d_max)
-
-    # points around robot
-    if robot_radius is not None:
-        mask_cyl = np.sqrt(points[:, 0] ** 2 + points[:, 1] ** 2) <= robot_radius / 2.
-    else:
-        mask_cyl = np.zeros(len(points), dtype=bool)
-
-    # combine and apply masks
-    mask = np.logical_and(mask_h, mask_sq)
-    mask = np.logical_and(mask, ~mask_cyl)
+def estimate_heightmap(points, grid_res, d_max, h_max, r_min=None, h_min=None):
+    # remove nans from the point cloud if any
+    mask = ~torch.isnan(points).any(dim=1)
     points = points[mask]
-    if len(points) == 0:
-        if return_filtered_points:
-            return None, None
-        return None
 
-    # create a grid
-    n = int(2 * d_max / grid_res)
-    xi = np.linspace(-d_max, d_max, n)
-    yi = np.linspace(-d_max, d_max, n)
-    x_grid, y_grid = np.meshgrid(xi, yi)
+    if r_min is not None:
+        # remove points in a r_min radius
+        distances = torch.norm(points[:, :2], dim=1)
+        mask = distances > r_min
+        points = points[mask]
 
-    if hm_interp_method is None:
-        # estimate heightmap
-        z_grid = np.full(x_grid.shape, fill_value=fill_value)
-        mask_meas = np.zeros_like(z_grid)
-        for i in range(len(points)):
-            xp, yp, zp = points[i]
-            # find the closest grid point
-            idx_x = np.argmin(np.abs(xi - xp))
-            idx_y = np.argmin(np.abs(yi - yp))
-            # update heightmap
-            if z_grid[idx_y, idx_x] == fill_value or zp > z_grid[idx_y, idx_x]:
-                z_grid[idx_y, idx_x] = zp
-                mask_meas[idx_y, idx_x] = 1.
-        mask_meas = mask_meas.astype(np.float32)
-    else:
-        X, Y, Z = points[:, 0], points[:, 1], points[:, 2]
-        z_grid = griddata((X, Y), Z, (xi[None, :], yi[:, None]),
-                          method=hm_interp_method, fill_value=fill_value)
-        mask_meas = np.full(z_grid.shape, 1., dtype=np.float32)
+    if h_min is None:
+        h_min = -h_max
 
-    z_grid = z_grid.T
-    mask_meas = mask_meas.T
-    heightmap = {'x': np.asarray(x_grid, dtype=np.float32),
-                 'y': np.asarray(y_grid, dtype=np.float32),
-                 'z': np.asarray(z_grid, dtype=np.float32),
-                 'mask': mask_meas}
+    mask = ((points[:, 0] > -d_max) & (points[:, 0] < d_max) &
+            (points[:, 1] > -d_max) & (points[:, 1] < d_max) &
+            (points[:, 2] > h_min) & (points[:, 2] < h_max))
+    points = points[mask]
 
-    if return_filtered_points:
-        return heightmap, points
+    # Extract X, Y, Z
+    x = points[:, 0]
+    y = points[:, 1]
+    z = points[:, 2]
 
-    return heightmap
+    # Compute grid dimensions
+    x_bins = torch.arange(-d_max, d_max, grid_res)
+    y_bins = torch.arange(-d_max, d_max, grid_res)
+
+    # Digitize coordinates to find grid indices
+    x_indices = torch.bucketize(x.contiguous(), x_bins) - 1
+    y_indices = torch.bucketize(y.contiguous(), y_bins) - 1
+
+    # Use scatter_reduce to populate the heightmap
+    flat_indices = y_indices * len(x_bins) + x_indices  # Flattened indices
+    flat_heightmap = torch.full((len(y_bins) * len(x_bins),), float('nan'))
+
+    # Use scatter_reduce to take the maximum height per grid cell
+    flat_heightmap = torch.scatter_reduce(
+        flat_heightmap,
+        dim=0,
+        index=flat_indices,
+        src=z,
+        reduce="amax",
+        include_self=False
+    )
+
+    # Reshape back to 2D
+    heightmap = flat_heightmap.view(len(y_bins), len(x_bins))
+
+    # Replace NaNs with a default value (e.g., 0.0)
+    measurements_mask = ~torch.isnan(heightmap)
+    heightmap = torch.nan_to_num(heightmap, nan=0.0)
+    # heightmap = torch.nan_to_num(heightmap, nan=(h_max + h_min) / 2.)
+
+    hm = torch.stack([heightmap, measurements_mask], dim=0)  # (2, H, W)
+
+    return hm
+
 
 
 def hm_to_cloud(height, d_max, mask=None):

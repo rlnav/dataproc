@@ -1,5 +1,18 @@
 #!/usr/bin/env python
 
+"""
+This script processes a ROS bag file to extract point cloud data, robot trajectory, and control information.
+It visualizes the data and simulates the robot's motion using a physics engine.
+It estimates a heightmap from the point cloud to be used for the simulation.
+
+We find for each point cloud the closest corresponding robot trajectory within a time horizon.
+Additionally, we find the corresponding robot control commands (cmd_vel and joint states) for the given time horizon.
+The data could be visualized with a probability `vis_prob`.
+
+We save the robot trajectory and control commands to files for later use (MonoForce model training).
+"""
+
+# ROS bag processing imports
 import rospy
 from geometry_msgs.msg import Twist
 from sensor_msgs.msg import JointState
@@ -7,14 +20,16 @@ from sensor_msgs.msg import PointCloud2
 from ros_numpy import numpify
 from tf2_ros import BufferCore, TransformException
 from rosbag import Bag, ROSBagException
-
+# common utils imports
 import os
 import numpy as np
 from tqdm import tqdm
 import matplotlib.pyplot as plt
 import torch
 from collections import deque
-
+from dataproc.io import write_to_csv, append_to_csv
+from dataproc.cloudproc import estimate_heightmap
+# visualization imports
 import sys
 sys.path.append('../../monoforce/monoforce/src')
 from monoforce.models.physics_engine.engine.engine import DPhysicsEngine, PhysicsState
@@ -22,7 +37,6 @@ from monoforce.models.physics_engine.utils.geometry import unit_quaternion
 from monoforce.models.physics_engine.engine.engine_state import vectorize_iter_of_states as vectorize_states
 from monoforce.models.physics_engine.vis.animator import animate_trajectory
 from monoforce.models.physics_engine.utils.environment import make_x_y_grids
-from monoforce.cloudproc import estimate_heightmap
 from monoforce.configs import RobotModelConfig, WorldConfig, PhysicsEngineConfig
 import matplotlib as mpl
 mpl.use('Qt5Agg')
@@ -194,29 +208,42 @@ def get_point_cloud_in_window(bag, target_time, time_window, topic):
     return closest_msg
 
 
-def process_bag(bag_file, cloud_times,
-                time_horizon=[0., 5.],
+def process_bag(bag_file, cloud_files,
+                traj_time_horizon=[0., 10.],
                 robot_frame='base_link',
                 fixed_frame='odom',
-                time_step=1.0,
-                time_search_window=0.2,
+                traj_time_step=1.0,
+                cloud_time_search_window=0.2,
                 cloud_topic='/points',
                 cmd_vel_topic='/cmd_vel',
-                joint_states_topic='/joint_states'):
+                joint_states_topic='/joint_states',
+                vis_prob=0.0,
+                save=False):
     try:
         bag = Bag(bag_file, 'r')
     except ROSBagException as ex:
         print(f"Error opening bag file: {ex}")
         return
+    # Get the time of the point clouds
+    cloud_files = sorted(cloud_files)
+    cloud_times = [fname_to_sec(f) for f in cloud_files]
+    assert np.all(np.diff(cloud_times) > 0), "Cloud files are not sorted by time."
+
+    seq_path = os.path.basename(bag_file.replace('.bag', ''))
+    seq_path = os.path.join('/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/', seq_path)
+    trajs_path = os.path.join(seq_path, 'trajectories')
+    controls_path = os.path.join(seq_path, 'controls')
+    for path in [trajs_path, controls_path]:
+        os.makedirs(path, exist_ok=True)
 
     tf_buffer = load_tf_buffer(bag)
     control_buffer = load_control_buffer(bag, cmd_vel_topic, joint_states_topic)
 
-    n = [int(np.floor(h / time_step)) for h in time_horizon]
+    n = [int(np.floor(h / traj_time_step)) for h in traj_time_horizon]
 
-    for cloud_time in tqdm(cloud_times):
+    for cloud_i, cloud_time in tqdm(enumerate(cloud_times), desc='Going through clouds stamps'):
         pcd_msg = get_point_cloud_in_window(bag, cloud_time,
-                                            time_window=time_search_window,
+                                            time_window=cloud_time_search_window,
                                             topic=cloud_topic)
         if pcd_msg is None:
             print(f"No point cloud found for time {cloud_time}")
@@ -239,7 +266,7 @@ def process_bag(bag_file, cloud_times,
         # Find transforms from input cloud to robot positions within the horizon.
         input_to_robot_tfs = []
         start = pcd_msg.header.stamp.to_sec()
-        traj_ts = np.linspace(start + n[0] * time_step, start + n[1] * time_step, (n[1] - n[0]) + 1)
+        traj_ts = np.linspace(start + n[0] * traj_time_step, start + n[1] * traj_time_step, (n[1] - n[0]) + 1)
         for t in traj_ts:
             try:
                 tf = tf_buffer.lookup_transform_full_core(robot_frame, rospy.Time.from_seconds(t),
@@ -254,13 +281,34 @@ def process_bag(bag_file, cloud_times,
         fixed_to_robot_tfs = input_to_fixed @ np.linalg.inv(input_to_robot_tfs)
 
         # get robot commanded velocities
-        time_left = start + time_horizon[0]
-        time_right = start + time_horizon[1]
+        time_left = start + traj_time_horizon[0]
+        time_right = start + traj_time_horizon[1]
         control_ts, controls = control_buffer.get_controls(time_left, time_right, step=0.01)
         theta0 = control_buffer.get_flipper_angles(traj_ts[0])[1]
-        print(points.shape, len(control_ts), len(controls), len(traj_ts), len(fixed_to_robot_tfs))
 
-        if np.random.random() < 0.05:
+        if save:
+            """Save the data"""
+            # trajectory
+            traj_path = os.path.join(trajs_path,
+                                     f'traj_{robot_frame}_{cloud_files[cloud_i]}'.replace('.npz', '.csv'))
+            write_to_csv(traj_path, 'stamp, T00, T01, T02, T03, T10, T11, T12, T13, T20, T21, T22, T23\n')
+            assert len(traj_ts) == len(fixed_to_robot_tfs), "Trajectory timestamps and transforms length mismatch."
+            for pose_i in range(len(fixed_to_robot_tfs)):
+                pose = fixed_to_robot_tfs[pose_i]
+                append_to_csv(traj_path,
+                              '%.9f, %s\n' % (traj_ts[pose_i], ', '.join(['%.3f' % x for x in pose[:3, :].flatten()])))
+
+            # controls
+            control_path = os.path.join(controls_path,
+                                        f'flipper_vs_ws_{cloud_files[cloud_i]}'.replace('.npz', '.csv'))
+            assert len(control_ts) == len(controls), "Control timestamps and values length mismatch."
+            write_to_csv(control_path, 'stamp, fl_v, fr_v, rl_v, rr_v, fl_w, fr_w, rl_w, rr_w\n')
+            for control_i in range(len(control_ts)):
+                append_to_csv(control_path,
+                              '%.9f, %s\n' % (control_ts[control_i], ', '.join(['%.3f' % c for c in controls[control_i]])))
+
+        # Visualize the data with probability vis_prob
+        if np.random.random() < vis_prob:
             ts, vels, omegas = control_buffer.get_vws(time_left, time_right)
             plt.figure(figsize=(16, 8))
             plt.subplot(121)
@@ -371,7 +419,6 @@ def motion(controls, points_input, fixed_to_robot, input_to_fixed, state0: Physi
         auxs.append(aux)
 
     states_vec = vectorize_states(states)
-    print(states_vec.x.shape)
 
     # visualization
     animate_trajectory(
@@ -382,7 +429,7 @@ def motion(controls, points_input, fixed_to_robot, input_to_fixed, state0: Physi
     )
 
 
-def to_sec(file_name):
+def fname_to_sec(file_name):
     # "1723650624_685964108.npz" -> 1723650624.685964108 [seconds]
     seconds = file_name.split('.')[0]
     seconds = float(seconds.replace('_', '.'))
@@ -396,17 +443,18 @@ def main():
 
     seq = f"../data/ROUGH/{bag_file.split('/')[-1].split('.')[0]}"
     clouds_path = os.path.join(seq, "clouds")
-    cloud_files = sorted(os.listdir(clouds_path))
-    cloud_stamps = [to_sec(f) for f in cloud_files]
+    cloud_files = os.listdir(clouds_path)
 
-    process_bag(bag_file, cloud_stamps,
-                time_horizon=[0., 5.],
+    process_bag(bag_file, cloud_files,
+                traj_time_horizon=[0., 10.],
                 fixed_frame='odom',
-                time_step=0.5,
-                time_search_window=0.2,
+                traj_time_step=0.5,
+                cloud_time_search_window=0.2,
                 cloud_topic='/points_filtered_kontron',
                 cmd_vel_topic='/marv/cartesian_controller/cmd_vel',
-                joint_states_topic='/marv/flippers/joint_states')
+                joint_states_topic='/marv/joint_states',
+                vis_prob=1.0,
+                save=False)
 
 
 if __name__ == "__main__":
