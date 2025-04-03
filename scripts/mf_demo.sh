@@ -9,7 +9,7 @@ do
 #  WEIGHTS=$HOME/workspaces/traversability_ws/src/monoforce/monoforce/config/weights/${TERRAIN_ENCODER}/val.pth
   WEIGHTS=$HOME/workspaces/traversability_ws/src/monoforce/monoforce/config/tb_runs/rough/lss_2025_03_25_11_28_40/val.pth
   echo "Terrain encoder ${TERRAIN_ENCODER} with trajectory predictor ${TRAJ_PREDICTOR}..."
-  python mf_demo.py --terrain_encoder ${TERRAIN_ENCODER} \
+  python mf_demo_new.py --terrain_encoder ${TERRAIN_ENCODER} \
                     --terrain_encoder_path ${WEIGHTS} \
                     --seq ${SEQ} \
                     --vis ${VIS}

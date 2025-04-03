@@ -14,17 +14,17 @@ import argparse
 from monoforce.models.physics_engine.engine.engine import DPhysicsEngine, PhysicsState
 from monoforce.configs import WorldConfig, RobotModelConfig, PhysicsEngineConfig
 from monoforce.models.physics_engine.engine.engine_state import vectorize_iter_of_states as vectorize_states
+from monoforce.models.physics_engine.utils.environment import make_x_y_grids
 from monoforce.models.terrain_encoder.lss import LiftSplatShoot
 from monoforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_mask, denormalize_img
 from monoforce.utils import read_yaml, compile_data, str2bool, normalize, timing
-from monoforce.datasets import ROUGH, rough_seq_paths
+from monoforce.datasets import ROUGH
 
 
 def arg_parser():
     parser = argparse.ArgumentParser(description='Terrain encoder predictor input arguments')
     parser.add_argument('--seq', type=str, default='val', help='Data sequence')
     parser.add_argument('--n_trajs', type=int, default=16, help='Number of predicted trajecotries')
-    parser.add_argument('--terrain_encoder', type=str, default='lss', help='Terrain encoder model')
     parser.add_argument('--terrain_encoder_path', type=str, default=None, help='Path to the LSS model')
     parser.add_argument('--vis', type=str2bool, default=True, help='Visualize the results')
     return parser.parse_args()
@@ -63,28 +63,18 @@ class Demo:
                  n_trajs=16,
                  grid_res=0.1,  # 10cm per grid cell
                  max_coord=6.4,  # meters
-                 terrain_encoder='lss',
                  terrain_encoder_path=None):
         self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
         # load DPhys config
-        if seq in rough_seq_paths:
-            robot = os.path.basename(seq).split('_')[0]
-            robot = 'tradr' if robot == 'ugv' else 'marv'
-        else:
-            robot = 'marv'
-        print(f'Robot: {robot}')
-        self.robot_model = RobotModelConfig(kind=robot).to(self.device)
+        self.robot_model = RobotModelConfig().to(self.device)
         self.n_trajs = n_trajs
-        DIM = int(2 * max_coord / grid_res)
-        xint = torch.linspace(-max_coord, max_coord, DIM)
-        yint = torch.linspace(-max_coord, max_coord, DIM)
-        x_grid, y_grid = torch.meshgrid(xint, yint, indexing="xy")  # use torch's XY indexing !!!!!
+        x_grid, y_grid = make_x_y_grids(max_coord=max_coord, grid_res=grid_res, num_robots=n_trajs)
         z_grid = torch.zeros_like(x_grid)
         self.world_config = WorldConfig(
-            x_grid=x_grid.repeat(n_trajs, 1, 1),
-            y_grid=y_grid.repeat(n_trajs, 1, 1),
-            z_grid=z_grid.repeat(n_trajs, 1, 1),
+            x_grid=x_grid,
+            y_grid=y_grid,
+            z_grid=z_grid,
             grid_res=grid_res,
             max_coord=max_coord,
         ).to(self.device)
@@ -93,7 +83,7 @@ class Demo:
 
         # load LSS config
         self.lss_config = read_yaml(os.path.join('../../monoforce/monoforce', 'config/lss_cfg.yaml'))
-        self.terrain_encoder = self.get_terrain_encoder(terrain_encoder_path, model=terrain_encoder)
+        self.terrain_encoder = self.get_terrain_encoder(terrain_encoder_path)
 
         # load data
         self.loader = self.get_dataloader(batch_size=1, seq=seq)
@@ -117,23 +107,16 @@ class Demo:
         return controls
 
     def get_terrain_encoder(self, path, model='lss'):
-        if model == 'lss':
-            terrain_encoder = LiftSplatShoot(self.lss_config['grid_conf'],
-                                             self.lss_config['data_aug_conf']).from_pretrained(path)
-        else:
-            raise ValueError(f'Invalid terrain encoder model: {model}. Supported: lss')
+        terrain_encoder = LiftSplatShoot(self.lss_config['grid_conf'],
+                                         self.lss_config['data_aug_conf']).from_pretrained(path)
         terrain_encoder.to(self.device)
         terrain_encoder.eval()
         return terrain_encoder
 
     def predict_terrain(self, batch):
-        model = self.terrain_encoder.__class__.__name__
-        if model == 'LiftSplatShoot':
-            imgs, rots, trans, intrins, post_rots, post_trans = batch[:6]
-            img_inputs = (imgs, rots, trans, intrins, post_rots, post_trans)
-            terrain = self.terrain_encoder(*img_inputs)
-        else:
-            raise ValueError(f'Invalid terrain encoder model: {model}. Supported: LiftSplatShoot')
+        imgs, rots, trans, intrins, post_rots, post_trans = batch[:6]
+        img_inputs = (imgs, rots, trans, intrins, post_rots, post_trans)
+        terrain = self.terrain_encoder(*img_inputs)
         return terrain
 
     def get_physics_engine(self):
@@ -145,14 +128,18 @@ class Demo:
     def predict_states(self, terrain, batch):
         n_trajs, n_iters = self.controls.shape[:2]
 
-        Xs, Xds, qs, Omegas = batch[12:16]
+        (imgs, rots, trans, intrins, post_rots, post_trans,
+         hm_geom, hm_terrain,
+         control_ts, controls,
+         traj_ts, xs, xds, qs, omegas, thetas) = batch
+
         # Initial state
-        x0 = Xs[:, 0].repeat(n_trajs, 1)
-        xd0 = Xds[:, 0].repeat(n_trajs, 1)
+        x0 = xs[:, 0].repeat(n_trajs, 1)
+        xd0 = xds[:, 0].repeat(n_trajs, 1)
         q0 = qs[:, 0].repeat(n_trajs, 1)
-        omega0 = Omegas[:, 0].repeat(n_trajs, 1)
-        thetas0 = self.controls[:, 0, 4:].clone()
-        state0 = PhysicsState(x0, xd0, q0, omega0, thetas0)
+        omega0 = omegas[:, 0].repeat(n_trajs, 1)
+        thetas0 = thetas[:, 0].repeat(n_trajs, 1)
+        state0 = PhysicsState(x0, xd0, q0, omega0, thetas0, batch_size=n_trajs)
 
         self.world_config.z_grid = terrain['terrain'].squeeze(1).repeat(n_trajs, 1, 1)
         states_pred = deque(maxlen=n_iters)
@@ -162,7 +149,8 @@ class Demo:
             states_pred.append(state)
         states_pred = vectorize_states(states_pred)
 
-        traj_costs = torch.zeros(len(states_pred.x), device=self.device)
+        # costs: average XY angular velocity. Omega.shape == (n_iters, n_trajs, 3)
+        traj_costs = states_pred.omega[:, :, :2].norm(dim=2).mean(dim=0)
 
         return states_pred, traj_costs
 
@@ -188,27 +176,29 @@ class Demo:
 
             # terrain prediction
             terrain = self.predict_terrain(batch)
-            H_t_pred, Friction_pred = terrain['terrain'], terrain['friction']
+            # terrain = {
+            #     'terrain': torch.zeros((1, 1, 128, 128), device=self.device),
+            # }
+            # terrain['terrain'][:, :, 20:50, :] = 1.
+            # terrain['terrain'][:, :, :, 100:110] = 2.
 
             # predict states
             states_pred, traj_costs = self.predict_states(terrain, batch)
             TRAJ_COST_MIN = traj_costs.min().item()
             TRAJ_COST_MAX = traj_costs.max().item()
             traj_costs_norm = (traj_costs - TRAJ_COST_MIN) / (TRAJ_COST_MAX - TRAJ_COST_MIN)
-            traj_colors = custom_cmap(traj_costs_norm.cpu().numpy())[..., :3][:, ::-1]
+            traj_colors = custom_cmap(traj_costs_norm.cpu().numpy())[..., :3][:, ::-1]  # RGB to BGR
 
             # visualizations
-            H_t_pred = H_t_pred[0, 0].cpu()
-            Friction_pred = Friction_pred[0, 0].cpu()
-            Xs_pred = states_pred.x.permute(1, 0, 2).cpu()
+            terrain_vis = terrain['terrain'][0, 0].cpu()
+            xs_pred = states_pred.x.permute(1, 0, 2).cpu()
 
             # get a sample from the dataset
             batch = [t.cpu() for t in batch]
             (imgs, rots, trans, intrins, post_rots, post_trans,
              hm_geom, hm_terrain,
              control_ts, controls,
-             pose0,
-             traj_ts, Xs, Xds, Rs, Omegas) = batch
+             traj_ts, xs, xds, qs, omegas, thetas) = batch
 
             # visualize images using opencv
             imgs_vis = []
@@ -220,8 +210,8 @@ class Demo:
                 cv2.putText(showimg, cams[imgi], (w//2, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
                 # project trajectory points on the image
-                for traj_i in range(len(Xs_pred)):
-                    cam_pts_Xs_pred = ego_to_cam(Xs_pred[traj_i, :, :3].reshape(-1, 3).T,
+                for traj_i in range(len(xs_pred)):
+                    cam_pts_Xs_pred = ego_to_cam(xs_pred[traj_i, :, :3].reshape(-1, 3).T,
                                                  rots[0, imgi], trans[0, imgi], intrins[0, imgi])
                     mask_img_Xs_pred = get_only_in_img_mask(cam_pts_Xs_pred, img_H, img_W)
                     plot_pts_Xs_pred = post_rots[0, imgi].matmul(cam_pts_Xs_pred) + post_trans[0, imgi].unsqueeze(1)
@@ -233,37 +223,34 @@ class Demo:
 
             # concatenate images
             img_vis = np.concatenate(imgs_vis, axis=1)
-            terrain_vis = H_t_pred.cpu().numpy()
-            terrain_vis = np.flipud(np.fliplr(terrain_vis))
-            friction_vis = Friction_pred.cpu().numpy()
-            friction_vis = np.flipud(np.fliplr(friction_vis))
-            assert friction_vis.shape == terrain_vis.shape
-            h, w = terrain_vis.shape
-            terrain_vis = terrain_vis[:h//2, :]
-            friction_vis = friction_vis[:h//2, :]
             # add color to terrain
-            terrain_vis = cv2.applyColorMap((normalize(terrain_vis) * 255).astype(np.uint8), cv2.COLORMAP_JET)
-            friction_vis = cv2.applyColorMap((normalize(friction_vis) * 255).astype(np.uint8), cv2.COLORMAP_JET)
+            terrain_vis = (normalize(terrain_vis).numpy() * 255).astype(np.uint8)
+            terrain_vis = cv2.applyColorMap(terrain_vis, cv2.COLORMAP_JET)
             # plot the predicted trajectory as lines
-            for traj_i in range(len(Xs_pred)):
-                Xs_pred_vis = (Xs_pred[traj_i, :, :2] + self.world_config.max_coord) / self.world_config.grid_res
-                Xs_pred_vis = Xs_pred_vis.cpu().numpy().astype(np.int32)
+            for traj_i in range(len(xs_pred)):
+                xs_pred_vis = (xs_pred[traj_i, :, :2] + self.world_config.max_coord) / self.world_config.grid_res
+                xs_pred_vis = xs_pred_vis.cpu().numpy().astype(np.int32)
                 # color based on cost small (green) to large (red)
                 color = traj_colors[traj_i] * 255
-                for j in range(1, len(Xs_pred_vis)):
-                    cv2.line(terrain_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
-                    cv2.line(friction_vis, tuple(Xs_pred_vis[j-1][::-1]), tuple(Xs_pred_vis[j][::-1]), color, 1)
-            terrain_vis = cv2.resize(terrain_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
-            cv2.putText(terrain_vis, 'Elevation', (img_vis.shape[1]//4, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
-            friction_vis = cv2.resize(friction_vis, (img_vis.shape[1]//2, img_vis.shape[1]//4), interpolation=cv2.INTER_NEAREST)
-            cv2.putText(friction_vis, 'Friction', (img_vis.shape[1] // 4, 20), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0),2)
-            terrain_vis = np.concatenate([terrain_vis, friction_vis], axis=1)
+                for j in range(1, len(xs_pred_vis)):
+                    cv2.line(terrain_vis, tuple(xs_pred_vis[j-1]), tuple(xs_pred_vis[j]), color, 1)
+            terrain_vis = cv2.resize(terrain_vis, (img_vis.shape[1], img_vis.shape[1]), interpolation=cv2.INTER_NEAREST)
+
+            # visualization hack to have terrain X axis pointing up
+            terrain_vis = cv2.rotate(terrain_vis, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            terrain_vis = cv2.flip(terrain_vis, 1)
+
+            cv2.putText(terrain_vis, 'Elevation', (img_vis.shape[1] // 2, 20),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
+
             # concatenate images and terrain
             res_vis = np.concatenate([img_vis, terrain_vis], axis=0)
+            res_vis = cv2.resize(res_vis, (res_vis.shape[1]//2, res_vis.shape[0]//2), interpolation=cv2.INTER_NEAREST)
 
             if vis:
                 cv2.imshow('Predictions', res_vis)
                 # cv2.waitKey(0)
+                # break
                 if cv2.waitKey(1) & 0xFF == ord('q'):
                     break
             else:
@@ -277,7 +264,6 @@ def main():
     print(args)
     demo = Demo(seq=args.seq,
                 n_trajs=args.n_trajs,
-                terrain_encoder=args.terrain_encoder,
                 terrain_encoder_path=args.terrain_encoder_path)
     demo.run(vis=args.vis)
 
