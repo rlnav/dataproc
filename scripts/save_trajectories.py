@@ -286,11 +286,19 @@ def process_bag(bag_path, cloud_files,
             except TransformException as ex:
                 print('Could not transform from %s to %s at %.3f s.' % (pcd_msg.header.frame_id, robot_frame, t))
                 print(ex)
-                # remove time without pose from the stamp array
-                traj_ts = traj_ts[traj_ts != t]
-                continue
+                # tf = tf_buffer.lookup_transform_full_core(robot_frame, rospy.Time.from_seconds(t),
+                #                                           pcd_msg.header.frame_id, rospy.Time(0),
+                #                                           # get the closest available transform
+                #                                           fixed_frame)
+                break
             tf = numpify(tf.transform)
             input_to_robot_tfs.append(tf)
+
+        # Check if we have enough transforms
+        if len(input_to_robot_tfs) < len(traj_ts):
+            print(f"Not enough transforms found for time {cloud_time}")
+            continue
+
         input_to_robot_tfs = np.array(input_to_robot_tfs)
         # robot trajectory is in the fixed frame
         fixed_to_robot_tfs = input_to_fixed @ np.linalg.inv(input_to_robot_tfs)
