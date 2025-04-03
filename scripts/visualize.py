@@ -16,7 +16,7 @@ def visualize_rough():
     for path in paths:
         assert os.path.isdir(path), 'Data path %s does not exist' % path
         ds = ROUGH(path, is_train=False)
-        explore_data(ds, sample_range=[406], save=False)
+        explore_data(ds, sample_range='random', save=False)
 
 
 def main():

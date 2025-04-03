@@ -21,7 +21,7 @@ Make sure to adjust the paths and data topics.
 - To save control inputs:
     ```commandline
     cd ./scripts/
-    ./add_controls
+    ./add_cmd_vels
     ```
 
 - RGB data anonymization using the [Deface](https://github.com/ORB-HD/deface) package:

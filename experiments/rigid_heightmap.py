@@ -1,5 +1,4 @@
 from monoforce.datasets import ROUGH, rough_seq_paths
-from monoforce.models.traj_predictor.dphys_config import DPhysConfig
 from monoforce.utils import read_yaml, normalize, explore_data
 from monoforce.cloudproc import hm_to_cloud, position
 import numpy as np
@@ -10,17 +9,17 @@ try:
 except:
     mpl.use('TkAgg')
 
-dphys_cfg = DPhysConfig()
 lss_cfg = read_yaml('../../monoforce/monoforce/config/lss_cfg.yaml')
+
 
 def segmentation_test():
     path = rough_seq_paths[2]
     # path = np.random.choice(rough_seq_paths)
-    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    ds = ROUGH(path=path, lss_cfg=lss_cfg)
     # for i in np.random.choice(range(len(ds)), 1):
     for i in [55]:
         print('Data index:', i)
-        seg_points, seg_colors = ds.get_semantic_cloud(i, vis=False)
+        seg_points, seg_colors = ds.get_semantic_cloud(i)
         seg_colors = normalize(seg_colors)
         traj_points = ds.get_footprint_traj_points(i)
         traj_colors = np.ones_like(traj_points) * [0, 0, 1]
@@ -28,16 +27,6 @@ def segmentation_test():
         colors = np.concatenate((seg_colors, traj_colors), axis=0)
 
         poses = ds.get_traj(i)['poses']
-
-        # heightmap = ds.get_terrain_height_map(i, cached=False)
-        # points = hm_to_cloud(heightmap[0], cfg=dphys_cfg, mask=heightmap[1])
-
-        # plt.figure(figsize=(10, 5))
-        # plt.subplot(1, 2, 1)
-        # plt.imshow(heightmap[0].squeeze().T, cmap='jet', vmin=-1, vmax=1, origin='lower')
-        # plt.subplot(1, 2, 2)
-        # plt.imshow(heightmap[1].squeeze().T, cmap='gray', origin='lower')
-        # plt.show()
 
         pcd = o3d.geometry.PointCloud()
         pcd.points = o3d.utility.Vector3dVector(points)
@@ -55,10 +44,10 @@ def segmentation_test():
 
 
 def rough_test():
-    seq_i = 8  #np.random.choice(len(rough_seq_paths))
+    seq_i = 0  #np.random.choice(len(rough_seq_paths))
     print(f'Path sequence id: {seq_i}')
     path = rough_seq_paths[seq_i]
-    ds = ROUGH(path=path, dphys_cfg=dphys_cfg, lss_cfg=lss_cfg)
+    ds = ROUGH(path=path, lss_cfg=lss_cfg)
     # ds = ds[np.random.choice(len(ds), 32, replace=False)]
 
     sample_i = 406  # np.random.choice(range(len(ds)))
@@ -71,8 +60,8 @@ def rough_test():
      pose0,
      traj_ts, Xs, Xds, Rs, Omegas) = sample
 
-    terrain_points = hm_to_cloud(hm_terrain[0], dphys_cfg, hm_terrain[1])
-    geom_points = hm_to_cloud(hm_geom[0], dphys_cfg, hm_geom[1])
+    terrain_points = hm_to_cloud(hm_terrain[0], d_max=6.4, mask=hm_terrain[1])
+    geom_points = hm_to_cloud(hm_geom[0], d_max=6.4, mask=hm_geom[1])
     points = position(ds.get_cloud(sample_i))
 
     # coordinate frame
