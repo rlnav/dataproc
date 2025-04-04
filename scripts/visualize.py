@@ -10,9 +10,9 @@ except:
     mpl.use('TkAgg')
 
 def visualize_rough():
-    paths = [f for f in rough_seq_paths if 'marv_2025-03-19-' in f]
-    # paths = sorted([os.path.join('../data/ROUGH/', f) for f in os.listdir('../data/ROUGH/') if f.startswith('marv_2025-03-19-')])
-        
+    paths = rough_seq_paths
+    # paths = [f for f in rough_seq_paths if 'marv_2025-03-19-' in f]
+
     for path in paths:
         assert os.path.isdir(path), 'Data path %s does not exist' % path
         ds = ROUGH(path, is_train=False)
