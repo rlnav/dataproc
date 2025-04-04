@@ -49,7 +49,7 @@ def generate_vws(n_trajs=10,
     N = int(time_horizon / dt)
     ws = torch.linspace(w_range[0], w_range[1], n_trajs).flatten()
     vs = v * torch.ones(n_trajs).flatten()
-    vs[::2] *= -1.  # reverse the direction of the last half of the trajectories
+    # vs[::2] *= -1.  # reverse the direction of the last half of the trajectories
 
     # repeat the controls for each time step
     vs = vs.unsqueeze(1).repeat(1, N)
@@ -94,10 +94,11 @@ class Demo:
         self.controls = self.get_controls(n_trajs=n_trajs)
 
         # output video file to write results
-        self.output_video = f'./gen/demo_{os.path.basename(seq)}.mp4'
+        self.output_video = f'./gen/demo_{os.path.basename(os.path.normpath(seq))}.mp4'
         # create output folder
         os.makedirs('./gen/', exist_ok=True)
-        self.video_writer = cv2.VideoWriter(self.output_video, cv2.VideoWriter_fourcc(*'mp4v'), 10, (1248, 568))
+        self.out_size = (1248, 880)  # (width, height)
+        self.video_writer = cv2.VideoWriter(self.output_video, cv2.VideoWriter_fourcc(*'mp4v'), 10, self.out_size)
 
     def get_controls(self, n_trajs=1):
         vws = generate_vws(n_trajs=n_trajs, time_horizon=7.0).to(self.device)
@@ -237,8 +238,8 @@ class Demo:
             # concatenate images
             img_vis = np.concatenate(imgs_vis, axis=1)
             # add color to terrain
-            z_grid = (normalize(z_grid).numpy() * 255).astype(np.uint8)
-            z_grid = cv2.applyColorMap(z_grid, cv2.COLORMAP_JET)
+            z_grid_vis = (normalize(z_grid).numpy() * 255).astype(np.uint8)
+            z_grid_vis = cv2.applyColorMap(z_grid_vis, cv2.COLORMAP_JET)
             # plot the predicted trajectory as lines
             for traj_i in range(len(xs_pred)):
                 xs_pred_vis = (xs_pred[traj_i, :, :2] + self.world_config.max_coord) / self.world_config.grid_res
@@ -246,22 +247,26 @@ class Demo:
                 # color based on cost small (green) to large (red)
                 color = traj_colors[traj_i] * 255
                 for j in range(1, len(xs_pred_vis)):
-                    cv2.line(z_grid, tuple(xs_pred_vis[j-1]), tuple(xs_pred_vis[j]), color, 1)
-            z_grid = cv2.resize(z_grid, (img_vis.shape[1], img_vis.shape[1]), interpolation=cv2.INTER_NEAREST)
+                    cv2.line(z_grid_vis, tuple(xs_pred_vis[j-1]), tuple(xs_pred_vis[j]), color, 1)
+            z_grid_vis = cv2.resize(z_grid_vis, (img_vis.shape[1], img_vis.shape[1]), interpolation=cv2.INTER_NEAREST)
 
             # vertival flip to have Y axis up
-            z_grid = cv2.flip(z_grid, 0)
+            z_grid_vis = cv2.flip(z_grid_vis, 0)
 
             # rotate 90 degrees counterclockwise to have forward direction up
-            z_grid = cv2.rotate(z_grid, cv2.ROTATE_90_COUNTERCLOCKWISE)
+            z_grid_vis = cv2.rotate(z_grid_vis, cv2.ROTATE_90_COUNTERCLOCKWISE)
 
-            cv2.putText(z_grid, 'Elevation', (img_vis.shape[1] // 2, 20),
+            cv2.putText(z_grid_vis, 'Elevation', (img_vis.shape[1] // 2, 20),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 0), 2)
 
+            # do not show bottom half of the terrain
+            h, w = z_grid_vis.shape[:2]
+            z_grid_vis = z_grid_vis[:h // 2, :]
+
             # concatenate images and terrain
-            res_vis = np.concatenate([img_vis, z_grid], axis=0)
-            res_vis = cv2.resize(res_vis, (2*res_vis.shape[1]//3, 2*res_vis.shape[0]//3),
-                                 interpolation=cv2.INTER_NEAREST)
+            res_vis = np.concatenate([img_vis, z_grid_vis], axis=0)
+            # resize to output size for video writing
+            res_vis = cv2.resize(res_vis, self.out_size, interpolation=cv2.INTER_NEAREST)
 
             if vis:
                 cv2.imshow('Predictions', res_vis)
