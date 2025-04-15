@@ -32,7 +32,7 @@ How to convert ROS1 bag files to ROS2 format.
     ls BAG_FILE_NAME_mcap
     BAG_FILE_NAME_mcap_0.mcap.zstd  metadata.yaml
     ```
-    Make sure the correction was correct or play the resultant bag-file for example with [foxglove](https://foxglove.dev/):
+    Make sure the conversion was correct or play the resultant bag-file for example with [Foxglove Studio](https://foxglove.dev/):
     ```bash
     ros2 bag info BAG_FILE_NAME_mcap 
     ```
