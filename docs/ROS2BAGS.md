@@ -5,19 +5,19 @@ How to convert ROS1 bag files to ROS2 format.
 1. Input: `*.bag` (ROS1 format), output: `*.db3` and `metadata.yaml` (ROS2 `sqlite3` format). The [rosbags](https://ternaris.gitlab.io/rosbags/) tools is required.
     ```bash
     pip install rosbags
-    rosbags-convert --src marv_2025-03-19-15-35-24.bag --dst marv_2025-03-19-15-35-24
+    rosbags-convert --src BAG_FILE_NAME.bag --dst BAG_FILE_NAME
     ```
-    The output-folder `marv_2025-03-19-15-35-24` should contain:
+    The output-folder `BAG_FILE_NAME` should contain:
     ```bash
-    ls marv_2025-03-19-15-35-24
-    marv_2025-03-19-15-35-24.db3  metadata.yaml
+    ls BAG_FILE_NAME
+    BAG_FILE_NAME.db3  metadata.yaml
     ```
 2. Convert from `sqlite3` format (ROS2) to `mcap` format (ROS2).
    - create a yaml-file `out.yaml` describing the output bag format with the following content:
    ```aiignore
    ---
    output_bags:
-   - uri: marv_2025-03-19-15-35-24_mcap
+   - uri: BAG_FILE_NAME_mcap
      storage_id: mcap
      all: true
      compression_mode: file
@@ -25,14 +25,14 @@ How to convert ROS1 bag files to ROS2 format.
    ```
    - perform the conversion to ROS2 [MCAP](https://mcap.dev/) format:
    ```bash
-   ros2 bag convert -i marv_2025-03-19-15-35-24 -o out.yaml
+   ros2 bag convert -i BAG_FILE_NAME -o out.yaml
    ```
-3. As a result you should have the folder `marv_2025-03-19-15-35-24_mcap` generated with the following content:
+3. As a result you should have the folder `BAG_FILE_NAME_mcap` generated with the following content:
     ```bash
-    ls marv_2025-03-19-15-35-24_mcap
-    marv_2025-03-19-15-35-24_mcap_0.mcap.zstd  metadata.yaml
+    ls BAG_FILE_NAME_mcap
+    BAG_FILE_NAME_mcap_0.mcap.zstd  metadata.yaml
     ```
     Make sure the correction was correct:
     ```bash
-    ros2 bag info marv_2025-03-19-15-35-24_mcap 
+    ros2 bag info BAG_FILE_NAME_mcap 
     ```
