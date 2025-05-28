@@ -1,11 +1,12 @@
-from monoforce.datasets.rough import ROUGH, rough_seq_paths
+from fusionforce.datasets.rough import ROUGH, rough_seq_paths
 import open3d as o3d
 import numpy as np
 import matplotlib.pyplot as plt
 
 
 def main():
-    path = np.random.choice(rough_seq_paths)
+    # path = np.random.choice(rough_seq_paths)
+    path = rough_seq_paths[0]
     ds = ROUGH(path=path)
     i = np.random.randint(0, len(ds))
     cloud = ds.get_cloud(i)
