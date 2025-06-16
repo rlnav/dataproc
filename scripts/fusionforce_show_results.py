@@ -50,7 +50,7 @@ def main():
     # plt.imshow(fig)
     # plt.axis('off')
     #
-    plt.show()
+    # plt.show()
 
 
 if __name__ == '__main__':

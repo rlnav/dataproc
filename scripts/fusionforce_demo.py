@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 
 import sys
-sys.path.append('../../monoforce/monoforce/src/')
+sys.path.append('../../fusionforce/fusionforce/fusionforce/')
 from tqdm import tqdm
 from matplotlib.colors import LinearSegmentedColormap
 import os
@@ -11,14 +11,14 @@ import torch
 from torch.utils.data import DataLoader
 from collections import deque
 import argparse
-from monoforce.models.physics_engine.engine.engine import DPhysicsEngine, PhysicsState
-from monoforce.configs import WorldConfig, RobotModelConfig, PhysicsEngineConfig
-from monoforce.models.physics_engine.engine.engine_state import vectorize_iter_of_states as vectorize_states
-from monoforce.models.physics_engine.utils.environment import make_x_y_grids
-from monoforce.models.terrain_encoder.lss import LiftSplatShoot
-from monoforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_mask, denormalize_img
-from monoforce.utils import read_yaml, compile_data, str2bool, normalize, timing
-from monoforce.datasets import ROUGH
+from fusionforce.models.physics_engine.engine.engine import DPhysicsEngine, PhysicsState
+from fusionforce.configs import WorldConfig, RobotModelConfig, PhysicsEngineConfig
+from fusionforce.models.physics_engine.engine.engine_state import vectorize_iter_of_states as vectorize_states
+from fusionforce.models.physics_engine.utils.environment import make_x_y_grids
+from fusionforce.models.terrain_encoder.lss import LiftSplatShoot
+from fusionforce.models.terrain_encoder.utils import ego_to_cam, get_only_in_img_mask, denormalize_img
+from fusionforce.utils import read_yaml, compile_data, str2bool, normalize
+from fusionforce.datasets import ROUGH
 
 
 def arg_parser():
@@ -26,7 +26,7 @@ def arg_parser():
     parser.add_argument('--seq', type=str, default='val', help='Data sequence')
     parser.add_argument('--n_trajs', type=int, default=16, help='Number of predicted trajecotries')
     parser.add_argument('--terrain_encoder_path', type=str,
-                        default='../../monoforce/monoforce/config/weights/lss/val.pth',
+                        default='../../fusionforce/fusionforce/config/weights/lss/val.pth',
                         help='Path to the LSS model')
     parser.add_argument('--vis', type=str2bool, default=True, help='Visualize the results')
     return parser.parse_args()
@@ -85,7 +85,7 @@ class Demo:
         self.physics_engine = self.get_physics_engine()
 
         # load LSS config
-        self.lss_config = read_yaml(os.path.join('../../monoforce/monoforce', 'config/lss_cfg.yaml'))
+        self.lss_config = read_yaml(os.path.join('../../fusionforce/fusionforce', 'config/lss_cfg.yaml'))
         self.terrain_encoder = self.get_terrain_encoder(terrain_encoder_path)
 
         # load data
@@ -270,10 +270,10 @@ class Demo:
 
             if vis:
                 cv2.imshow('Predictions', res_vis)
-                # cv2.waitKey(0)
-                # break
-                if cv2.waitKey(1) & 0xFF == ord('q'):
-                    break
+                cv2.waitKey(0)
+                break
+                # if cv2.waitKey(1) & 0xFF == ord('q'):
+                #     break
             else:
                 self.video_writer.write(res_vis)
 
