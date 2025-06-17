@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import os
 import cv2
 import numpy as np
 
@@ -11,6 +12,7 @@ from rclpy.node import Node
 
 from cv_bridge import CvBridge
 from sensor_msgs.msg import Image, CameraInfo, PointCloud2
+from sensor_msgs_py import point_cloud2 as pc2
 from message_filters import ApproximateTimeSynchronizer, Subscriber
 import tf2_ros
 
@@ -28,6 +30,7 @@ class DataProcessor(Node):
         self.declare_parameter('point_cloud_topic', '/depth/points')
         self.declare_parameter('max_msgs_delay', 0.1)
         self.declare_parameter('period', 1.0)
+        self.declare_parameter('output_path', './')
 
         self.img_topics = self.get_parameter('img_topics').get_parameter_value().string_array_value
         self.camera_info_topics = self.get_parameter('camera_info_topics').get_parameter_value().string_array_value
@@ -40,6 +43,17 @@ class DataProcessor(Node):
         self._tf_buffer = tf2_ros.Buffer()
         self._listener = tf2_ros.TransformListener(self._tf_buffer, self)
         self.prev_time = self.get_clock().now()
+
+        self.output_path = self.get_parameter('output_path').get_parameter_value().string_value
+        self.cloud_path = os.path.join(self.output_path, 'clouds')
+        os.makedirs(self.cloud_path, exist_ok=True)
+        self.img_path = os.path.join(self.output_path, 'images')
+        os.makedirs(os.path.join(self.img_path, 'left'), exist_ok=True)
+        os.makedirs(os.path.join(self.img_path, 'right'), exist_ok=True)
+        self.depth_path = os.path.join(self.output_path, 'depth')
+        os.makedirs(self.depth_path, exist_ok=True)
+        self.calib_path = os.path.join(self.output_path, 'calibration')
+        os.makedirs(self.calib_path, exist_ok=True)
 
     def safe_lookup_transform(self, target_frame, source_frame, time):
         try:
@@ -84,14 +98,33 @@ class DataProcessor(Node):
         self.prev_time = now
         self._logger.debug('Received %d messages' % len(msgs))
 
-        for msg in msgs:
-            if isinstance(msg, Image):
-                cv_image = self.cv_bridge.imgmsg_to_cv2(msg, desired_encoding='passthrough')
-                self._logger.debug(f'Image shape: {cv_image.shape}, dtype: {cv_image.dtype}')
-            elif isinstance(msg, CameraInfo):
-                self._logger.debug(f'CameraInfo K matrix: {msg.k}')
-            elif isinstance(msg, PointCloud2):
-                self._logger.debug(f'PointCloud2 with {msg.width * msg.height} points')
+        stamp = msgs[0].header.stamp
+
+        # TODO: do not assume a fixed order of messages:
+        # msgs[0] is left image, msgs[1] is right image, msgs[2] is depth image
+        # msgs[3] is left camera info, msgs[4] is right camera info, msgs[5] is depth camera info
+        # msgs[6] is point cloud
+        imgL = self.cv_bridge.imgmsg_to_cv2(msgs[0], desired_encoding='passthrough')
+        imgR = self.cv_bridge.imgmsg_to_cv2(msgs[1], desired_encoding='passthrough')
+        depth_img = self.cv_bridge.imgmsg_to_cv2(msgs[2], desired_encoding='passthrough')
+        self._logger.debug(f'imgL.shape = {imgL.shape}')
+        self._logger.debug(f'imgR.shape = {imgR.shape}')
+        self._logger.debug(f'depth_img.shape = {depth_img.shape}')
+
+        points = pc2.read_points_numpy(msgs[6], skip_nans=False)
+        self._logger.debug(f'PointCloud2 has {points.shape} shape')
+
+        # save data
+        ind = f'{stamp.sec:010d}_{stamp.nanosec:09d}'
+        imgL_filename = os.path.join(self.img_path, 'left', f'{ind}.png')
+        cv2.imwrite(imgL_filename, imgL)
+        imgR_filename = os.path.join(self.img_path, 'right', f'{ind}.png')
+        cv2.imwrite(imgR_filename, imgR)
+        depth_filename = os.path.join(self.depth_path, f'{ind}.png')
+        cv2.imwrite(depth_filename, depth_img)
+
+        cloud_filename = os.path.join(self.cloud_path, f'{ind}.npz')
+        np.savez(cloud_filename, points=points)
 
 
 def main(args=None):

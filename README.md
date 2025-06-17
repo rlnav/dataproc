@@ -2,11 +2,7 @@
 
 Data processing tools from bag files to data sequences.
 The dataset is used to train
-[MonoForce](https://github.com/ctu-vras/monoforce) traversability estimation models.
-
-The bag files are available at:
-- [http://subtdata.felk.cvut.cz/outdoor-dataset/](http://subtdata.felk.cvut.cz/outdoor-dataset/)
-- [http://subtdata.felk.cvut.cz/robingas/](http://subtdata.felk.cvut.cz/robingas/)
+[FusionForce](https://github.com/ctu-vras/fusionforce) traversability estimation models.
 
 ## Usage
 
@@ -14,8 +10,7 @@ Make sure to adjust the paths and data topics.
 
 - To save lidar clouds, corresponding camera images, and calibration (extrinsics and intrinsics) from a bag file:
     ```commandline
-    OUTPUT_PATH=/path/to/save/data/sequence
-    roslaunch dataproc dataproc.launch output_path:=${OUTPUT_PATH} img_topics:=[] lidar_topics:=[] camera_info_topics:=[]
+    ros2 launch dataproc save_data.launch bag_path:=/path/to/bag output_path:=/path/to/save/data
     ```
 
 - To save control inputs:

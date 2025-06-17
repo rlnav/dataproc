@@ -163,8 +163,4 @@ cython_debug/
 data/*
 
 # Pytorch weights
-*.pt
 *.pth
-
-# Generated outputs
-gen/
