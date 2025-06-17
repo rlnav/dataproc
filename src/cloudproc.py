@@ -1,5 +1,4 @@
 import torch
-from .segmentation import affine
 from .utils import position
 import numpy as np
 
@@ -16,6 +15,17 @@ __all__ = [
     'hm_to_cloud',
 ]
 
+
+
+def affine(tf, x):
+    """Apply an affine transform to points."""
+    tf = np.asarray(tf)
+    x = np.asarray(x)
+    assert tf.ndim == 2
+    assert x.ndim == 2
+    assert tf.shape[1] == x.shape[0] + 1
+    y = np.matmul(tf[:-1, :-1], x) + tf[:-1, -1:]
+    return y
 
 def within_bounds(x, min=None, max=None, bounds=None, log_variable=None):
     """Mask of x being within bounds  min <= x <= max."""

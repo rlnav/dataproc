@@ -1,10 +1,8 @@
 import numpy as np
 from numpy.lib.recfunctions import unstructured_to_structured, structured_to_unstructured
 from PIL import Image, ImageFile
-import rospy
 from timeit import default_timer as timer
 import torch
-import torchvision
 import yaml
 import open3d as o3d
 ImageFile.LOAD_TRUNCATED_IMAGES = True
@@ -12,7 +10,6 @@ ImageFile.LOAD_TRUNCATED_IMAGES = True
 
 __all__ = [
     'slots',
-    'timing',
     'read_points_ply',
     'read_points_bin',
     'read_points_labels',
@@ -29,16 +26,6 @@ __all__ = [
 def slots(msg):
     """Return message attributes (slots) as list."""
     return [getattr(msg, var) for var in msg.__slots__]
-
-
-def timing(f):
-    def timing_wrapper(*args, **kwargs):
-        t0 = timer()
-        ret = f(*args, **kwargs)
-        t1 = timer()
-        rospy.logdebug('%s %.6f s' % (f.__name__, t1 - t0))
-        return ret
-    return timing_wrapper
 
 
 def read_points_ply(path, dtype=np.float32):

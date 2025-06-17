@@ -1,8 +1,8 @@
 #!/usr/bin/env python
 
 import os
-from monoforce.datasets import rough_seq_paths, ROUGH
-from monoforce.utils import explore_data
+from fusionforce.datasets import rough_seq_paths, ROUGH
+from fusionforce.utils import explore_data
 import matplotlib as mpl
 try:
     mpl.use('Qt5Agg')

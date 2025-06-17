@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 import os
 from random import random
 from time import sleep
-import yaml
 
 
 def write_to_csv(path, text, append=False, create_dirs=True):
@@ -64,17 +63,3 @@ class PathLock(object):
     def __exit__(self, exc_type, exc_val, exc_tb):
         if self.locked:
             self.unlock()
-
-
-def append_to_yaml(yaml_path, data_dict):
-    if not os.path.exists(yaml_path):
-        with open(yaml_path, 'w') as f:
-            yaml.dump(data_dict, f)
-    else:
-        with open(yaml_path, 'r') as f:
-            print('Updating yaml file: %s' % yaml_path)
-            cur_yaml = yaml.load(f, Loader=yaml.FullLoader)
-            cur_yaml.update(data_dict)
-
-        with open(yaml_path, 'w') as f:
-            yaml.safe_dump(cur_yaml, f)  # Also note the safe_dump
