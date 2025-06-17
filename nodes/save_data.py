@@ -32,6 +32,27 @@ def append_to_yaml(yaml_path, data_dict):
         with open(yaml_path, 'w') as f:
             yaml.safe_dump(cur_yaml, f)  # Also note the safe_dump
 
+def write_intrinsics_to_yaml(output_dir, msg, camera_name):
+    output_path_cam = os.path.join(output_dir, '%s.yaml' % camera_name)
+    os.makedirs(os.path.dirname(output_path_cam), exist_ok=True)
+    print('Saving to %s' % output_path_cam)
+    K = np.asarray(msg.k).reshape(3, 3)
+    D = np.asarray(msg.d)
+    with open(output_path_cam, 'w') as f:
+        f.write('image_width: %d\n' % msg.width)
+        f.write('image_height: %d\n' % msg.height)
+        f.write('camera_name: %s\n' % camera_name)
+        f.write('camera_matrix:\n')
+        f.write('  rows: 3\n')
+        f.write('  cols: 3\n')
+        f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in K.reshape(-1)]))
+        f.write('distortion_model: %s\n' % msg.distortion_model)
+        f.write('distortion_coefficients:\n')
+        f.write('  rows: 1\n')
+        f.write('  cols: %d\n' % len(D))
+        f.write('  data: [%s]\n' % ', '.join(['%.12f' % x for x in D]))
+    f.close()
+
 
 class DataProcessor(Node):
 
@@ -164,28 +185,27 @@ class DataProcessor(Node):
         # save calibration data
         if not self.saved_calibration:
             Tr_camleft_robot = self.get_transform(imgL_msg.header.frame_id, self.robot_frame, time=stamp)
-            yaml_data_dict = {'Tr_camleft_robot':
+            yaml_data_dict = {'Tr_camera_left__robot':
                                   {'rows': 4, 'cols': 4,
                                    'data': ['%.3f' % x for x in Tr_camleft_robot.flatten()]}}
             append_to_yaml(os.path.join(self.calib_path, 'transformations.yaml'), yaml_data_dict)
 
             Tr_camright_robot = self.get_transform(imgR_msg.header.frame_id, self.robot_frame, time=stamp)
-            yaml_data_dict = {'Tr_camright_robot':
+            yaml_data_dict = {'Tr_camera_right__robot':
                                   {'rows': 4, 'cols': 4,
                                    'data': ['%.3f' % x for x in Tr_camright_robot.flatten()]}}
             append_to_yaml(os.path.join(self.calib_path, 'transformations.yaml'), yaml_data_dict)
 
             Tr_camdepth_robot = self.get_transform(depth_msg.header.frame_id, self.robot_frame, time=stamp)
-            yaml_data_dict = {'Tr_camdepth_robot':
+            yaml_data_dict = {'Tr_depth_camera__robot':
                                   {'rows': 4, 'cols': 4,
                                    'data': ['%.3f' % x for x in Tr_camdepth_robot.flatten()]}}
             append_to_yaml(os.path.join(self.calib_path, 'transformations.yaml'), yaml_data_dict)
 
-            Tr_points_robot = self.get_transform(point_cloud_msg.header.frame_id, self.robot_frame, time=stamp)
-            yaml_data_dict = {'Tr_points_robot':
-                                  {'rows': 4, 'cols': 4,
-                                   'data': ['%.3f' % x for x in Tr_points_robot.flatten()]}}
-            append_to_yaml(os.path.join(self.calib_path, 'transformations.yaml'), yaml_data_dict)
+            # save camera intrinsics
+            write_intrinsics_to_yaml(os.path.join(self.calib_path, 'cameras'),  left_camera_info_msg, 'camera_left')
+            write_intrinsics_to_yaml(os.path.join(self.calib_path, 'cameras'), right_camera_info_msg,'camera_right')
+            write_intrinsics_to_yaml(os.path.join(self.calib_path, 'cameras'), depth_camera_info_msg, 'depth_camera')
 
             self._logger.debug('Saved calibration data to %s' % self.calib_path)
 
