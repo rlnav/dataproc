@@ -5,7 +5,7 @@ import yaml
 import open3d as o3d
 
 
-def get_colored_cloud(depth: np.ndarray, K: np.ndarray, image=None) -> o3d.geometry.PointCloud:
+def get_colored_cloud(depth: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
     # read color and depth images
     height, width = depth.shape
 
@@ -19,9 +19,9 @@ def get_colored_cloud(depth: np.ndarray, K: np.ndarray, image=None) -> o3d.geome
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(point3d_coords)
 
-    if image is not None:
+    if rgb is not None:
         # calculate matrix 'point3d_colors' where each row is (r,g,b) for each point
-        point3d_colors = image.reshape(width * height, 3) / 255
+        point3d_colors = rgb.reshape(width * height, 3) / 255
         pcd.colors = o3d.utility.Vector3dVector(point3d_colors)
 
     return pcd
@@ -29,26 +29,38 @@ def get_colored_cloud(depth: np.ndarray, K: np.ndarray, image=None) -> o3d.geome
 
 def main():
     seq_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
-    images = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
-    depths = sorted(os.listdir(os.path.join(seq_path, 'depth')))
+    image_files = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
+    depth_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'depth')))
+    clouds_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'clouds')))
     calibration_path = os.path.join(seq_path, 'calibration')
+    # ind = np.random.randint(0, len(image_files))
+    ind = 150
 
-    img_path = os.path.join(seq_path, 'images', 'left', images[0])
-    image = Image.open(img_path)
+    img_path = os.path.join(seq_path, 'images', 'left', image_files[ind])
+    image = Image.open(img_path).convert('RGB')
     # image.show()
 
-    depth_path = os.path.join(seq_path, 'depth', depths[0])
+    depth_path = os.path.join(seq_path, 'luxonis', 'depth', depth_files[ind])
     depth = Image.open(depth_path)
     # depth.show()
 
     # read camera intrinsics
-    calib = yaml.safe_load(open(os.path.join(calibration_path, 'cameras', 'camera_left.yaml')))
+    calib = yaml.safe_load(open(os.path.join(calibration_path, 'cameras', 'camera_right.yaml')))
     K = np.array(calib['camera_matrix']['data']).reshape(3, 3)
+
+    points_path = os.path.join(seq_path, 'luxonis', 'clouds', clouds_files[ind])
+    points = np.load(points_path)['points']
+    points = points[~np.isnan(points).any(axis=1)]
+    print(points.shape)
+
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
 
     image = np.asarray(image)
     depth = np.asarray(depth)
-    pcd = get_colored_cloud(depth, K)
-    o3d.visualization.draw_geometries([pcd])
+    pcd_depth = get_colored_cloud(depth, K, rgb=image)
+    # o3d.visualization.draw_geometries([pcd, pcd_depth])
+    o3d.visualization.draw_geometries([pcd_depth])
 
 
 if __name__ == '__main__':
