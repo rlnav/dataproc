@@ -49,8 +49,63 @@ def main():
     # plt.imshow(fig)
     # plt.axis('off')
     #
-    # plt.show()
+    plt.show()
+
+
+def plot_xyz_error_histogram():
+    # figure font size
+    mpl.rcParams['font.size'] = 28
+
+    categories = ['RGB', 'Points', 'RGB + Points']
+    column1 = [0.043, 0.042, 0.045]
+    column2 = [0.128, 0.129, 0.125]
+
+    # Set bar width and positions
+    x = np.arange(len(categories))
+    width = 0.25
+
+    plt.figure(figsize=(10, 8))
+    plt.bar(x - width, column1, width, label=r'$\nabla$Physics')
+    plt.bar(x, column2, width, label='TrajLSTM')
+    # plt.xlabel('Sensor Input')
+    plt.ylabel('Translational Error [m]')
+    plt.xticks(x, categories)
+    plt.ylim([0, 0.20])
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_rot_error_histogram():
+    # figure font size
+    mpl.rcParams['font.size'] = 28
+
+    categories = ['RGB', 'Points', 'RGB + Points']
+    column1 = [2.013, 2.123, 2.254]
+    column2 = [3.494, 3.369, 3.067]
+
+    # Set bar width and positions
+    x = np.arange(len(categories))
+    width = 0.25
+
+    # Create the plot
+    plt.figure(figsize=(10, 8))
+    plt.bar(x - width, column1, width, label=r'$\nabla$Physics')
+    plt.bar(x, column2, width, label='TrajLSTM')
+
+    # Add labels, legend, and title
+    # plt.xlabel('Sensor Input')
+    plt.ylabel('Rotation Error [deg]')
+    plt.xticks(x, categories)
+    plt.ylim([0, 5])
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    plt.show()
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    plot_xyz_error_histogram()
+    plot_rot_error_histogram()
