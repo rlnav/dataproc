@@ -77,6 +77,7 @@ def compare_depths():
 
     o3d.visualization.draw_geometries([pcd_luxonis, pcd_defom])
 
+
 def main():
     # ind = np.random.randint(0, len(image_files))
     ind = 150
