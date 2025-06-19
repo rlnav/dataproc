@@ -5,23 +5,33 @@ import yaml
 import open3d as o3d
 
 
-def get_colored_cloud(depth: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
-    # read color and depth images
-    height, width = depth.shape
+def get_colored_cloud(depth_mm: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
+    height, width = depth_mm.shape
 
-    # calculate matrix 'point3d_coords' where each row is (x,y,z) for each point
-    coords = np.vstack([np.indices(depth.shape).reshape((depth.ndim, -1)), np.ones(width * height)])
+    # Generate pixel coordinates
+    vu = np.indices(depth_mm.shape).reshape((2, -1))  # shape (2, H*W)
+    uv = vu[::-1, :]  # shape (2, H*W)
+    coords = np.vstack([
+        uv[0, :],  # u (x-coordinate)
+        uv[1, :],  # v (y-coordinate)
+        np.ones(height * width)
+    ])  # shape (3, H*W)
+
     K_inv = np.linalg.inv(K)
-    point3d_coords = np.transpose((K_inv @ coords) * depth.flatten())
-    point3d_coords /= 1000. # convert to meters
+    depth_flat = depth_mm.flatten()
+    points = (K_inv @ coords) * depth_flat  # shape (3, H*W)
+    point3d_coords = points.T / 1000.0  # convert to meters, shape (H*W, 3)
 
-    # convert to open3d format
+    # Filter out invalid points (depth == 0)
+    valid = depth_flat > 0
+    point3d_coords = point3d_coords[valid]
+
+    # Create point cloud
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(point3d_coords)
 
     if rgb is not None:
-        # calculate matrix 'point3d_colors' where each row is (r,g,b) for each point
-        point3d_colors = rgb.reshape(width * height, 3) / 255
+        point3d_colors = rgb.reshape(height * width, 3)[valid] / 255.0
         pcd.colors = o3d.utility.Vector3dVector(point3d_colors)
 
     return pcd

@@ -3,34 +3,17 @@ import numpy as np
 import cv2
 import yaml
 import open3d as o3d
+from depth_to_cloud import get_colored_cloud
 
 
-def get_colored_cloud(depth: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
-    # read color and depth images
-    height, width = depth.shape
-
-    # calculate matrix 'point3d_coords' where each row is (x,y,z) for each point
-    coords = np.vstack([np.indices(depth.shape).reshape((depth.ndim, -1)), np.ones(width * height)])
-    K_inv = np.linalg.inv(K)
-    point3d_coords = np.transpose((K_inv @ coords) * depth.flatten())
-
-    # convert to open3d format
-    pcd = o3d.geometry.PointCloud()
-    pcd.points = o3d.utility.Vector3dVector(point3d_coords)
-
-    if rgb is not None:
-        # calculate matrix 'point3d_colors' where each row is (r,g,b) for each point
-        point3d_colors = rgb.reshape(width * height, 3) / 255
-        pcd.colors = o3d.utility.Vector3dVector(point3d_colors)
-
-    return pcd
+seq_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
+image_files = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
+depth_files = sorted([f for f in os.listdir(os.path.join(seq_path, 'defom-stereo', 'disparity')) if f.endswith('.npy')])
+points_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'clouds')))
+calibration_path = os.path.join(seq_path, 'calibration')
 
 
 def main():
-    seq_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
-    image_files = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
-    depth_files = sorted([f for f in os.listdir(os.path.join(seq_path, 'defom-stereo', 'disparity')) if f.endswith('.npy')])
-    calibration_path = os.path.join(seq_path, 'calibration')
     # ind = np.random.randint(0, len(image_files))
     ind = 150
 
@@ -39,11 +22,13 @@ def main():
 
     disp_path = os.path.join(seq_path, 'defom-stereo', 'disparity', depth_files[ind])
     disp = np.load(disp_path)
+
     # # apply colormap to disparity
     # disp_vis = cv2.convertScaleAbs(disp, alpha=255/disp.max())
     # disp_vis = cv2.applyColorMap(disp_vis, cv2.COLORMAP_JET)
     # cv2.imshow("Disparity", disp_vis)
     # cv2.waitKey(0)
+    # cv2.destroyWindow("Disparity")
 
     # read camera intrinsics
     calib_intr = yaml.safe_load(open(os.path.join(calibration_path, 'cameras', 'camera_left.yaml')))
@@ -57,18 +42,23 @@ def main():
     cams_baseline = 0.15
 
     # depth = (cams_baseline * focal_length) / (disp + 1e-6)  # [m] * [pixels] / [pixels] = [m]
-    valid_mask = disp > 1.0
+    valid_mask = disp > 2.0
     depth = np.zeros_like(disp)
     depth[valid_mask] = (cams_baseline * focal_length) / disp[valid_mask]
-    depth[depth > 10.0] = 0  # optional
-    print(depth)
 
     image = np.asarray(image)
     depth = np.asarray(depth)
-    pcd = get_colored_cloud(depth, K, rgb=image)
-    # pcd, _ = pcd.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
+    pcd_disp = get_colored_cloud(depth * 1000., K, rgb=image)
+    pcd_disp, _ = pcd_disp.remove_statistical_outlier(nb_neighbors=20, std_ratio=2.0)
 
-    o3d.visualization.draw_geometries([pcd])
+    points_path = os.path.join(seq_path, 'luxonis', 'clouds', points_files[ind])
+    points = np.load(points_path)['points']
+    # remove NaN points
+    points = points[~np.isnan(points).any(axis=1)]
+    pcd = o3d.geometry.PointCloud()
+    pcd.points = o3d.utility.Vector3dVector(points)
+
+    o3d.visualization.draw_geometries([pcd_disp, pcd])
 
 
 if __name__ == '__main__':
