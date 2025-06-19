@@ -2,11 +2,13 @@
 
 from mmseg.apis import init_model, inference_model, show_result_pyplot
 import os
-from fusionforce.datasets.rough import rough_seq_paths
-from fusionforce.models.terrain_encoder.utils import resize_img
 from PIL import Image
 import numpy as np
 from tqdm import tqdm
+import torchvision.transforms
+
+
+resize_img = torchvision.transforms.Resize(512, interpolation=Image.BICUBIC)
 
 
 def main():

@@ -5,7 +5,25 @@ import yaml
 import open3d as o3d
 
 
-def get_colored_cloud(depth_mm: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
+seq_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
+image_files = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
+depth_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'depth')))
+clouds_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'clouds')))
+calibration_path = os.path.join(seq_path, 'calibration')
+
+# read camera intrinsics
+calib = yaml.safe_load(open(os.path.join(calibration_path, 'cameras', 'camera_right.yaml')))
+K = np.array(calib['camera_matrix']['data']).reshape(3, 3)
+
+f = K[0, 0]  # assuming fx is the first element in the camera matrix
+
+calib_extr = yaml.safe_load(open(os.path.join(calibration_path, 'transformations.yaml')))
+Tr_camera_left__robot = np.array(calib_extr['Tr_camera_left__robot']['data'], dtype=float).reshape(4, 4)
+Tr_camera_right__robot = np.array(calib_extr['Tr_camera_right__robot']['data'], dtype=float).reshape(4, 4)
+B = np.linalg.norm(Tr_camera_left__robot[:3, 3] - Tr_camera_right__robot[:3, 3])  # cameras baseline [m]
+
+
+def get_cloud_from_depth(depth_mm: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geometry.PointCloud:
     height, width = depth_mm.shape
 
     # Generate pixel coordinates
@@ -37,12 +55,29 @@ def get_colored_cloud(depth_mm: np.ndarray, K: np.ndarray, rgb=None) -> o3d.geom
     return pcd
 
 
+def compare_depths():
+    ind = 150
+    depth_path = os.path.join(seq_path, 'luxonis', 'depth', depth_files[ind])
+    depth = Image.open(depth_path)
+    # depth.show()
+
+    depth_gt_path = os.path.join(seq_path, 'defom-stereo', 'depth', depth_files[ind].replace('.png', '.npy'))
+    depth_gt = np.load(depth_gt_path)
+
+    valid_mask = np.ones(depth_gt.shape, dtype=bool)
+    valid_mask[:7, :] = False
+    valid_mask[:, :7] = False
+    valid_mask = valid_mask & (depth_gt < (B * f * 1000 / 2))  # filter out points that are too far
+    depth_gt = depth_gt * valid_mask
+
+    pcd_luxonis = get_cloud_from_depth(np.asarray(depth), K, rgb=None)
+    pcd_luxonis.paint_uniform_color([0, 1, 0])  # green for Luxonis depth cloud
+    pcd_defom = get_cloud_from_depth(np.asarray(depth_gt), K, rgb=None)
+    pcd_defom.paint_uniform_color([1, 0, 0])  # red for DEFOM-Stereo depth cloud
+
+    o3d.visualization.draw_geometries([pcd_luxonis, pcd_defom])
+
 def main():
-    seq_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
-    image_files = sorted(os.listdir(os.path.join(seq_path, 'images', 'left')))
-    depth_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'depth')))
-    clouds_files = sorted(os.listdir(os.path.join(seq_path, 'luxonis', 'clouds')))
-    calibration_path = os.path.join(seq_path, 'calibration')
     # ind = np.random.randint(0, len(image_files))
     ind = 150
 
@@ -54,10 +89,6 @@ def main():
     depth = Image.open(depth_path)
     # depth.show()
 
-    # read camera intrinsics
-    calib = yaml.safe_load(open(os.path.join(calibration_path, 'cameras', 'camera_right.yaml')))
-    K = np.array(calib['camera_matrix']['data']).reshape(3, 3)
-
     points_path = os.path.join(seq_path, 'luxonis', 'clouds', clouds_files[ind])
     points = np.load(points_path)['points']
     points = points[~np.isnan(points).any(axis=1)]
@@ -68,10 +99,11 @@ def main():
 
     image = np.asarray(image)
     depth = np.asarray(depth)
-    pcd_depth = get_colored_cloud(depth, K, rgb=image)
-    # o3d.visualization.draw_geometries([pcd, pcd_depth])
-    o3d.visualization.draw_geometries([pcd_depth])
+    pcd_depth = get_cloud_from_depth(depth, K, rgb=image)
+    o3d.visualization.draw_geometries([pcd, pcd_depth])
+    # o3d.visualization.draw_geometries([pcd_depth])
 
 
 if __name__ == '__main__':
-    main()
+    # main()
+    compare_depths()
