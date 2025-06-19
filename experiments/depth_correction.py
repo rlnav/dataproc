@@ -83,23 +83,32 @@ class Data(Dataset):
 
 
 def demo():
+    import cv2
+
     dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
     ds = Data(dataset_path)
 
     i = 150
-    depth_input, depth_label = ds[i]
+    depth_in, depth_gt = ds[i]
     max_depth = 10_000.0  # in mm
 
     # visualize colored depth
-    import cv2
-
-    depth_scaled = cv2.convertScaleAbs(depth_input.squeeze(), alpha=255.0 / max_depth)
+    depth_scaled = cv2.convertScaleAbs(depth_in.squeeze(), alpha=255.0 / max_depth)
     depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
     cv2.imshow("Depth Input", depth_colored)
 
-    depth_scaled_label = cv2.convertScaleAbs(depth_label.squeeze(), alpha=255.0 / max_depth)
+    depth_scaled_label = cv2.convertScaleAbs(depth_gt.squeeze(), alpha=255.0 / max_depth)
     depth_colored_label = cv2.applyColorMap(depth_scaled_label, cv2.COLORMAP_JET)
     cv2.imshow("Depth Label", depth_colored_label)
+
+    mask_dist = depth_in > 0
+    mask_nan = np.isnan(depth_gt) | np.isinf(depth_gt)
+    mask_valid = np.ones(depth_gt.shape, dtype=bool)
+    mask_valid[:, :7, :] = False
+    mask_valid[:, :, :7] = False
+    mask = mask_dist & mask_valid & (~mask_nan)
+    # mask = mask_dist & (~mask_nan)
+    cv2.imshow("Mask", mask.squeeze().astype(np.uint8) * 255)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
@@ -136,11 +145,10 @@ def main():
 
             mask_dist = depth_in > 0
             mask_nan = torch.isnan(depth_gt) | torch.isinf(depth_gt)
-            # mask_valid = torch.ones(depth_gt.shape, dtype=torch.bool, device=device)
-            # mask_valid[:7, :] = False
-            # mask_valid[:, :7] = False
-            # mask = mask_dist & mask_valid & (~mask_nan)
-            mask = mask_dist & (~mask_nan)
+            mask_valid = torch.ones(depth_gt.shape, dtype=torch.bool, device=device)
+            mask_valid[..., :7, :] = False
+            mask_valid[..., :, :7] = False
+            mask = mask_dist & mask_valid & (~mask_nan)
 
             loss = criterion(depth_pred[mask], depth_gt[mask])
 
@@ -175,3 +183,4 @@ def main():
 
 if __name__ == '__main__':
     main()
+    # demo()
