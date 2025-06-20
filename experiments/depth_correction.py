@@ -8,12 +8,36 @@ import torch.nn.functional as F
 import segmentation_models_pytorch as smp
 from tqdm import tqdm
 import cv2
-from fusionforce.utils import load_calib
 from PIL import Image
+import yaml
 
 
 dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+
+def load_calib(calib_path):
+    calib = {}
+    # read camera calibration
+    cams_path = os.path.join(calib_path, 'cameras')
+    if not os.path.exists(cams_path):
+        print('No cameras calibration found in path {}'.format(cams_path))
+        return None
+
+    for file in os.listdir(cams_path):
+        if file.endswith('.yaml'):
+            with open(os.path.join(cams_path, file), 'r') as f:
+                cam_info = yaml.load(f, Loader=yaml.FullLoader)
+                calib[file.replace('.yaml', '')] = cam_info
+            f.close()
+    # read cameras-lidar transformations
+    trans_path = os.path.join(calib_path, 'transformations.yaml')
+    with open(trans_path, 'r') as f:
+        transforms = yaml.load(f, Loader=yaml.FullLoader)
+    f.close()
+    calib['transformations'] = transforms
+
+    return calib
 
 
 class Data(Dataset):
@@ -121,9 +145,9 @@ def demo():
     cv2.destroyAllWindows()
 
 
-def train(lr=0.001, nepochs=100):
+def train(lr=0.01, nepochs=100, bs=8):
     ds = Data(dataset_path)
-    loader = DataLoader(ds, batch_size=8, shuffle=True)
+    loader = DataLoader(ds, batch_size=bs, shuffle=True)
 
     model = smp.Unet(
         encoder_name='mobilenet_v2',
@@ -135,8 +159,10 @@ def train(lr=0.001, nepochs=100):
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.MSELoss()
+    loss_min = np.inf
     for epoch in range(nepochs):
         model.train()
+        loss_epoch = 0
         for rgb_in, depth_in, depth_gt in tqdm(loader):
             rgb_in = rgb_in.to(device)
             depth_in = depth_in.float().to(device)
@@ -154,13 +180,18 @@ def train(lr=0.001, nepochs=100):
             mask = mask_dist & mask_valid & (~mask_nan)
 
             loss = criterion(depth_pred[mask] / ds.max_depth, depth_gt[mask] / ds.max_depth)
+            loss_epoch += loss.item()
 
             loss.backward()
             optimizer.step()
 
-        print(f'Epoch {epoch}, Loss: {loss.item()}')
+        loss_epoch /= len(loader)
+        print(f'Epoch {epoch}, Loss: {loss_epoch}')
         # save model checkpoint
-        torch.save(model.state_dict(), f'dc_unet_{epoch}.pth')
+        if loss_epoch < loss_min:
+            loss_min = loss_epoch
+            print(f'Saving model with loss {loss_min:.4f}')
+            torch.save(model.state_dict(), 'dc_unet.pth')
 
 
 def result():
@@ -168,29 +199,27 @@ def result():
     model = smp.Unet(
         encoder_name='mobilenet_v2',
         encoder_weights='imagenet',
-        in_channels=1,
+        in_channels=2,
         classes=1,
     )
-    model.load_state_dict(torch.load('dc_unet_10.pth'))
+    model.load_state_dict(torch.load('dc_unet_27.pth', map_location=device))
     model.eval()
     model.to(device)
     # visualize predictions
     with torch.no_grad():
         rgb_in, depth_in, depth_gt = next(iter(loader))
-        # rgb_in = rgb_in.to(device)
+        rgb_in = rgb_in.to(device)
         depth_in = depth_in.float().to(device)
-        # depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
-        depth_pred = model(depth_in)
+        depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
         depth_pred = depth_pred.cpu().numpy()[0][0]
         depth_gt = depth_gt.cpu().numpy()[0][0]
 
         # visualize colored depth
-        max_depth = 10_000.0  # in mm
-        depth_scaled = cv2.convertScaleAbs(depth_pred, alpha=255.0 / max_depth)
+        depth_scaled = cv2.convertScaleAbs(depth_pred, alpha=255.0 / loader.dataset.max_depth)
         depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
         cv2.imshow("Depth Prediction", depth_colored)
 
-        depth_scaled_gt = cv2.convertScaleAbs(depth_gt, alpha=255.0 / max_depth)
+        depth_scaled_gt = cv2.convertScaleAbs(depth_gt, alpha=255.0 / loader.dataset.max_depth)
         depth_colored_gt = cv2.applyColorMap(depth_scaled_gt, cv2.COLORMAP_JET)
         cv2.imshow("Depth Ground Truth", depth_colored_gt)
 
@@ -199,7 +228,7 @@ def result():
 
 
 def main():
-    train()
+    train(lr=0.01, nepochs=100, bs=8)
     # demo()
     # result()
 
