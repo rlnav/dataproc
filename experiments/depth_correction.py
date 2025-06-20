@@ -4,11 +4,16 @@ import numpy as np
 from glob import glob
 import torch
 from torch.utils.data import Dataset, DataLoader
+import torch.nn.functional as F
 import segmentation_models_pytorch as smp
 from tqdm import tqdm
-
+import cv2
 from fusionforce.utils import load_calib
 from PIL import Image
+
+
+dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 class Data(Dataset):
@@ -64,6 +69,7 @@ class Data(Dataset):
     def get_image(self, i, camera='left'):
         img_path = self.image_files[camera][i]
         img = Image.open(img_path)
+        img = np.asarray(img)
         return img
 
     def get_depth(self, i, source='luxonis'):
@@ -77,22 +83,23 @@ class Data(Dataset):
         return depth
 
     def get_sample(self, i):
+        img = self.get_image(i, camera='right')
         depth_input = self.get_depth(i, source='luxonis')
         depth_label = self.get_depth(i, source='defom-stereo')
-        return depth_input[np.newaxis], depth_label[np.newaxis]
+        return img[np.newaxis], depth_input[np.newaxis], depth_label[np.newaxis]
 
 
 def demo():
     import cv2
 
-    dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
     ds = Data(dataset_path)
 
     i = 150
-    depth_in, depth_gt = ds[i]
+    rgb, depth_in, depth_gt = ds[i]
     max_depth = 10_000.0  # in mm
 
-    # visualize colored depth
+    cv2.imshow('rgb', rgb.squeeze())
+
     depth_scaled = cv2.convertScaleAbs(depth_in.squeeze(), alpha=255.0 / max_depth)
     depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
     cv2.imshow("Depth Input", depth_colored)
@@ -101,7 +108,7 @@ def demo():
     depth_colored_label = cv2.applyColorMap(depth_scaled_label, cv2.COLORMAP_JET)
     cv2.imshow("Depth Label", depth_colored_label)
 
-    mask_dist = depth_in > 0
+    mask_dist = (depth_in > 0) & (depth_gt < max_depth)
     mask_nan = np.isnan(depth_gt) | np.isinf(depth_gt)
     mask_valid = np.ones(depth_gt.shape, dtype=bool)
     mask_valid[:, :7, :] = False
@@ -114,73 +121,88 @@ def demo():
     cv2.destroyAllWindows()
 
 
-def main():
-    dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
+def train(lr=0.001, nepochs=100):
     ds = Data(dataset_path)
     loader = DataLoader(ds, batch_size=8, shuffle=True)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     model = smp.Unet(
-        encoder_name='mobilenet_v2',  # choose encoder, e.g. mobilenet_v2 or resnet18
-        encoder_weights='imagenet',  # use `imagenet` pre-trained weights for encoder initialization
-        in_channels=1,  # model input channels (1 for grayscale images)
-        classes=1,  # model output channels (number of classes in your dataset)
+        encoder_name='mobilenet_v2',
+        encoder_weights='imagenet',
+        in_channels=2,
+        classes=1,
     )
-    model.train()
     model.to(device)
 
-    optimizer = torch.optim.Adam(model.parameters(), lr=0.001)
+    optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.MSELoss()
-    for epoch in range(10):  # number of epochs
-        for depth_in, depth_gt in tqdm(loader):
+    for epoch in range(nepochs):
+        model.train()
+        for rgb_in, depth_in, depth_gt in tqdm(loader):
+            rgb_in = rgb_in.to(device)
             depth_in = depth_in.float().to(device)
             depth_gt = depth_gt.float().to(device)
 
-            # preprocessing
-            depth_in = depth_in / ds.max_depth
-            depth_gt = depth_gt / ds.max_depth
-
             optimizer.zero_grad()
-            depth_pred = model(depth_in)
+            depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
+            depth_pred = F.relu(depth_pred)
 
-            mask_dist = depth_in > 0
+            mask_dist = (depth_in > 0) & (depth_gt < ds.max_depth)
             mask_nan = torch.isnan(depth_gt) | torch.isinf(depth_gt)
             mask_valid = torch.ones(depth_gt.shape, dtype=torch.bool, device=device)
             mask_valid[..., :7, :] = False
             mask_valid[..., :, :7] = False
             mask = mask_dist & mask_valid & (~mask_nan)
 
-            loss = criterion(depth_pred[mask], depth_gt[mask])
+            loss = criterion(depth_pred[mask] / ds.max_depth, depth_gt[mask] / ds.max_depth)
 
             loss.backward()
             optimizer.step()
 
         print(f'Epoch {epoch}, Loss: {loss.item()}')
+        # save model checkpoint
+        torch.save(model.state_dict(), f'dc_unet_{epoch}.pth')
 
-        # # visualize predictions
-        # with torch.no_grad():
-        #     depth_in, depth_gt = next(iter(loader))
-        #     depth_in = depth_in.float().to(device)
-        #     depth_pred = model(depth_in)
-        #     depth_pred = depth_pred.cpu().numpy().squeeze()[0]
-        #     depth_gt = depth_gt.cpu().numpy().squeeze()[0]
-        #
-        #     # visualize colored depth
-        #     import cv2
-        #
-        #     max_depth = 10_000.0  # in mm
-        #     depth_scaled = cv2.convertScaleAbs(depth_pred, alpha=255.0 / max_depth)
-        #     depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
-        #     cv2.imshow("Depth Prediction", depth_colored)
-        #
-        #     depth_scaled_gt = cv2.convertScaleAbs(depth_gt, alpha=255.0 / max_depth)
-        #     depth_colored_gt = cv2.applyColorMap(depth_scaled_gt, cv2.COLORMAP_JET)
-        #     cv2.imshow("Depth Ground Truth", depth_colored_gt)
-        #
-        #     cv2.waitKey(0)
-        #     cv2.destroyAllWindows()
+
+def result():
+    loader = DataLoader(Data(dataset_path), batch_size=1, shuffle=False)
+    model = smp.Unet(
+        encoder_name='mobilenet_v2',
+        encoder_weights='imagenet',
+        in_channels=1,
+        classes=1,
+    )
+    model.load_state_dict(torch.load('dc_unet_10.pth'))
+    model.eval()
+    model.to(device)
+    # visualize predictions
+    with torch.no_grad():
+        rgb_in, depth_in, depth_gt = next(iter(loader))
+        # rgb_in = rgb_in.to(device)
+        depth_in = depth_in.float().to(device)
+        # depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
+        depth_pred = model(depth_in)
+        depth_pred = depth_pred.cpu().numpy()[0][0]
+        depth_gt = depth_gt.cpu().numpy()[0][0]
+
+        # visualize colored depth
+        max_depth = 10_000.0  # in mm
+        depth_scaled = cv2.convertScaleAbs(depth_pred, alpha=255.0 / max_depth)
+        depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
+        cv2.imshow("Depth Prediction", depth_colored)
+
+        depth_scaled_gt = cv2.convertScaleAbs(depth_gt, alpha=255.0 / max_depth)
+        depth_colored_gt = cv2.applyColorMap(depth_scaled_gt, cv2.COLORMAP_JET)
+        cv2.imshow("Depth Ground Truth", depth_colored_gt)
+
+        cv2.waitKey(0)
+        cv2.destroyAllWindows()
+
+
+def main():
+    train()
+    # demo()
+    # result()
 
 
 if __name__ == '__main__':
     main()
-    # demo()
