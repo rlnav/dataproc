@@ -4,16 +4,25 @@ import numpy as np
 from glob import glob
 import torch
 from torch.utils.data import Dataset, DataLoader
-import torch.nn.functional as F
 import segmentation_models_pytorch as smp
 from tqdm import tqdm
 import cv2
 from PIL import Image
 import yaml
+import argparse
 
 
-dataset_path = '/media/ruslan/VRAS-DATA 4TB 2/datasets/ROUGH/helhest_2025_06_13-15_01_10'
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+def parse_args():
+    parser = argparse.ArgumentParser(description='Depth Correction Training')
+    parser.add_argument('--dataset_path', type=str, default='/mnt/personal/agishrus/data/datasets/ROUGH/helhest_2025_06_13-15_01_10',
+                        help='Path to the dataset')
+    parser.add_argument('--device', type=str, default='cuda' if torch.cuda.is_available() else 'cpu',
+                        help='Device to use for training (cuda or cpu)')
+    parser.add_argument('--bs', type=int, default=32, help='Batch size for training')
+    parser.add_argument('--lr', type=float, default=1e-3, help='Learning rate for the optimizer')
+    parser.add_argument('--nepochs', type=int, default=100, help='Number of epochs for training')
+    return parser.parse_args()
+
 
 
 def load_calib(calib_path):
@@ -113,16 +122,35 @@ class Data(Dataset):
         return img[np.newaxis], depth_input[np.newaxis], depth_label[np.newaxis]
 
 
-def demo():
-    import cv2
+
+class DCModel(torch.nn.Module):
+    def __init__(self):
+        super().__init__()
+        self.model = smp.Linknet(
+            encoder_name='mobilenet_v2',
+            encoder_weights='imagenet',
+            in_channels=2,
+            classes=1,
+            activation=None,
+        )
+        self.relu = torch.nn.ReLU()
+
+    def forward(self, x):
+        x = self.model(x)
+        x = self.relu(x)
+        return x
+
+
+def data_test(args):
+    dataset_path = args.dataset_path
 
     ds = Data(dataset_path)
 
     i = 150
-    rgb, depth_in, depth_gt = ds[i]
+    img, depth_in, depth_gt = ds[i]
     max_depth = 10_000.0  # in mm
 
-    cv2.imshow('rgb', rgb.squeeze())
+    cv2.imshow('img', img.squeeze())
 
     depth_scaled = cv2.convertScaleAbs(depth_in.squeeze(), alpha=255.0 / max_depth)
     depth_colored = cv2.applyColorMap(depth_scaled, cv2.COLORMAP_JET)
@@ -133,28 +161,28 @@ def demo():
     cv2.imshow("Depth Label", depth_colored_label)
 
     mask_dist = (depth_in > 0) & (depth_gt < max_depth)
-    mask_nan = np.isnan(depth_gt) | np.isinf(depth_gt)
+    mask_nan = np.isnan(depth_gt) | np.isnan(depth_gt)
     mask_valid = np.ones(depth_gt.shape, dtype=bool)
     mask_valid[:, :7, :] = False
     mask_valid[:, :, :7] = False
     mask = mask_dist & mask_valid & (~mask_nan)
-    # mask = mask_dist & (~mask_nan)
     cv2.imshow("Mask", mask.squeeze().astype(np.uint8) * 255)
 
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
 
-def train(lr=0.01, nepochs=100, bs=8):
+def train(args):
+    dataset_path = args.dataset_path
+    device = args.device
+    bs = args.bs
+    lr = args.lr
+    nepochs = args.nepochs
+
     ds = Data(dataset_path)
     loader = DataLoader(ds, batch_size=bs, shuffle=True)
 
-    model = smp.Unet(
-        encoder_name='mobilenet_v2',
-        encoder_weights='imagenet',
-        in_channels=2,
-        classes=1,
-    )
+    model = DCModel()
     model.to(device)
 
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
@@ -163,17 +191,16 @@ def train(lr=0.01, nepochs=100, bs=8):
     for epoch in range(nepochs):
         model.train()
         loss_epoch = 0
-        for rgb_in, depth_in, depth_gt in tqdm(loader):
-            rgb_in = rgb_in.to(device)
+        for img_in, depth_in, depth_gt in tqdm(loader):
+            img_in = img_in.to(device)
             depth_in = depth_in.float().to(device)
             depth_gt = depth_gt.float().to(device)
 
             optimizer.zero_grad()
-            depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
-            depth_pred = F.relu(depth_pred)
+            depth_pred = model(torch.cat([img_in, depth_in], dim=1))
 
             mask_dist = (depth_in > 0) & (depth_gt < ds.max_depth)
-            mask_nan = torch.isnan(depth_gt) | torch.isinf(depth_gt)
+            mask_nan = torch.isnan(depth_gt) | torch.isnan(depth_gt)
             mask_valid = torch.ones(depth_gt.shape, dtype=torch.bool, device=device)
             mask_valid[..., :7, :] = False
             mask_valid[..., :, :7] = False
@@ -191,26 +218,24 @@ def train(lr=0.01, nepochs=100, bs=8):
         if loss_epoch < loss_min:
             loss_min = loss_epoch
             print(f'Saving model with loss {loss_min:.4f}')
-            torch.save(model.state_dict(), 'dc_unet.pth')
+            torch.save(model.state_dict(), 'dc_net.pth')
 
 
-def result():
+def result(args):
+    dataset_path = args.dataset_path
+    device = args.device
+
     loader = DataLoader(Data(dataset_path), batch_size=1, shuffle=False)
-    model = smp.Unet(
-        encoder_name='mobilenet_v2',
-        encoder_weights='imagenet',
-        in_channels=2,
-        classes=1,
-    )
-    model.load_state_dict(torch.load('dc_unet_27.pth', map_location=device))
+    model = DCModel()
+    model.load_state_dict(torch.load('dc_net.pth', map_location=device))
     model.eval()
     model.to(device)
     # visualize predictions
     with torch.no_grad():
-        rgb_in, depth_in, depth_gt = next(iter(loader))
-        rgb_in = rgb_in.to(device)
+        img_in, depth_in, depth_gt = next(iter(loader))
+        img_in = img_in.to(device)
         depth_in = depth_in.float().to(device)
-        depth_pred = model(torch.cat([rgb_in, depth_in], dim=1))
+        depth_pred = model(torch.cat([img_in, depth_in], dim=1))
         depth_pred = depth_pred.cpu().numpy()[0][0]
         depth_gt = depth_gt.cpu().numpy()[0][0]
 
@@ -227,10 +252,34 @@ def result():
         cv2.destroyAllWindows()
 
 
+def inference_test(agrs):
+    from time import time
+    from tqdm import tqdm
+
+    device = 'cpu'
+    model = DCModel()
+    model.to(device)
+    model.eval()
+    img_dummy = torch.randn(1, 1, 480, 768).to(device)
+    depth_dummy = torch.randn(1, 1, 480, 768).to(device)
+
+    n_iters = 100
+    t0 = time()
+    for _ in tqdm(range(n_iters)):
+        with torch.inference_mode():
+            depth_pred = model(torch.cat([img_dummy, depth_dummy], dim=1))
+    t1 = time()
+    t_avg = (t1 - t0) / n_iters
+    print(f'Average inference time: {t_avg:.4f} seconds per iteration on {device}')
+
+
 def main():
-    train(lr=0.01, nepochs=100, bs=8)
-    # demo()
-    # result()
+    args = parse_args()
+
+    train(args)
+    # data_test(args)
+    # result(args)
+    # inference_test(args)
 
 
 if __name__ == '__main__':
