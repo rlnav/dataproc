@@ -1,0 +1,186 @@
+#!/usr/bin/env python3
+
+"""Compute semantic segmentation for ROUGH Final dataset."""
+
+import os
+import sys
+import zipfile
+from contextlib import ExitStack
+from typing import Any, Optional, Union
+
+import numpy as np
+import torch
+import torchvision
+
+from PIL import Image
+from tqdm import tqdm
+
+from mmseg.apis import init_model, inference_model, show_result_pyplot
+from mmseg.structures import SegDataSample
+
+camera_to_mask = {
+    'camera_fisheye_front_image_color_compressed': 'camera_fisheye_front_mask_compressed',
+    'camera_fisheye_rear_image_color_compressed': 'camera_fisheye_rear_mask_compressed',
+    'camera_front_image_color_compressed': 'camera_front_mask_compressed',
+    'camera_right_image_color_compressed': 'camera_right_mask_compressed',
+    'camera_rear_image_color_compressed': 'camera_rear_mask_compressed',
+    'camera_left_image_color_compressed': 'camera_left_mask_compressed',
+    'camera_up_image_color_compressed': 'camera_up_mask_compressed',
+    'oak_rgb_image_raw_compressed': 'oak_rgb_mask_compressed',
+    'oak_left_image_raw_compressed': 'oak_left_mask_compressed',
+    'oak_right_image_raw_compressed': 'oak_right_mask_compressed',
+}
+"""
+Mapping from camera file names to the corresponding mask file names.
+
+Only cameras suitable for running the segmentation should be listed (i.e. not masks, depth or thermo).
+"""
+
+resize_img = torchvision.transforms.Resize(512, interpolation=Image.BICUBIC)
+
+
+def main():
+    config_path = '../packages/WildScenes/wildscenes/configs/deeplabv3/deeplabv3_r50-d8_2xb20-80k_wildscenes-512x512_standard.py'
+    checkpoint_path = '../packages/WildScenes/pretrained_models/deeplabv3_wildscenes.pth'
+    model = init_model(config_path, checkpoint_path)
+
+    if len(sys.argv) > 1:
+        paths = sys.argv[1:]
+    else:
+        data_dir = os.environ.get('ROUGH_FINAL_DATA_DIR', '/mnt/sdb1')
+        paths = [os.path.join(data_dir, '25-03-19-petrin', 'marv_2025-03-19-14-41-19')]
+    print(paths)
+    
+    robot_body_masked_class = 255  # unlabelled
+    """Semantic class assigned to pixels that are covered by robot body according to the provided robot body masks."""
+
+    for seq_path in tqdm(paths):
+        print(f'Processing {seq_path}')
+        camera_zips = [cam_zip for cam_zip in os.listdir(seq_path) if os.path.splitext(cam_zip)[0] in camera_to_mask]
+        camera_zips = [os.path.join(seq_path, cam_zip) for cam_zip in camera_zips]
+        print(f'Found {len(camera_zips)} cameras')
+        for cam_zip_path in camera_zips:
+            cam_zip_name = os.path.basename(cam_zip_path)
+            cam_base_name = os.path.splitext(cam_zip_name)[0]
+            print(f'Processing camera {cam_base_name}')
+
+            resized_folder = os.path.join(seq_path, 'resized')
+            seg_folder = os.path.join(seq_path, 'wildscenes_seg')
+            vis_folder = os.path.join(seq_path, 'wildscenes_vis')
+            os.makedirs(resized_folder, exist_ok=True)
+            os.makedirs(seg_folder, exist_ok=True)
+            os.makedirs(vis_folder, exist_ok=True)
+
+            with ExitStack() as exit_stack:
+                cam_zip = exit_stack.enter_context(zipfile.ZipFile(cam_zip_path, 'r'))
+
+                mask_base_name = camera_to_mask[cam_base_name]
+                mask_zip_name = mask_base_name + '.zip'
+                mask_zip_path = os.path.join(seq_path, mask_zip_name)
+                has_masks = os.path.exists(mask_zip_path)
+                if has_masks:
+                    print(f'Reading masks for camera {cam_base_name} from {mask_zip_name}')
+                    mask_zip = exit_stack.enter_context(zipfile.ZipFile(mask_zip_path, 'r'))
+
+                proc_zip_name = cam_zip_name
+
+                resized_zip_path = os.path.join(resized_folder, proc_zip_name)
+                seg_zip_path = os.path.join(seg_folder, proc_zip_name)
+                vis_zip_path = os.path.join(vis_folder, proc_zip_name)
+                
+                resized_zip = exit_stack.enter_context(zipfile.ZipFile(resized_zip_path, 'a'))
+                seg_zip = exit_stack.enter_context(zipfile.ZipFile(seg_zip_path, 'a'))
+                vis_zip = exit_stack.enter_context(zipfile.ZipFile(vis_zip_path, 'a'))
+
+                if has_masks:
+                    proc_mask_zip_name = mask_zip_name
+                    resized_mask_zip_path = os.path.join(resized_folder, proc_mask_zip_name)
+                    resized_mask_zip = exit_stack.enter_context(zipfile.ZipFile(resized_mask_zip_path, 'a'))
+
+                for img_path in tqdm(cam_zip.namelist()):
+                    # filename format is camera.stamp_sec.stamp_nsec.ext
+                    img_stamp = '.'.join(img_path.split('.')[1:3])
+                    img_format = os.path.splitext(img_path)[1].lstrip('.')
+                    if img_format.lower() == 'jpg':
+                        img_format = 'jpeg'
+
+                    resized_zip_path = os.path.join(resized_folder, proc_zip_name)
+                    seg_zip_path = os.path.join(seg_folder, proc_zip_name)
+                    vis_zip_path = os.path.join(vis_folder, proc_zip_name)
+                    if img_path in seg_zip.namelist() and img_path in vis_zip.namelist():
+                        continue
+
+                    # resize camera image and cache result
+                    resized_img = None
+                    if img_path in resized_zip.namelist():
+                        try:
+                            with resized_zip.open(img_path, 'r') as resized_img_f:
+                                resized_img = Image.open(resized_img_f)
+                                resized_img.load()
+                        except Exception as e:
+                            print(f'Error reading resized image: {e}. Regenerating it.', file=sys.stderr)
+                    if not validate_img(resized_img):
+                        with cam_zip.open(img_path, 'r') as img_f, resized_zip.open(img_path, 'w') as resized_img_f:
+                            resized_img = resize_img(Image.open(img_f))
+                            resized_img.save(resized_img_f, format=img_format)
+
+                    # inference
+                    resized_img_np = np.asarray(resized_img)
+                    result: SegDataSample = inference_model(model, resized_img_np)
+                    
+                    if has_masks:
+                        # apply robot body mask if it is provided
+                        mask_img_path = f'{mask_base_name}.{img_stamp}.pbm'
+                        if mask_img_path in mask_zip.namelist():
+                            resized_mask_img = None
+                            if mask_img_path in resized_mask_zip.namelist():
+                                try:
+                                    with resized_mask_zip.open(mask_img_path, 'r') as resized_img_f:
+                                        resized_mask_img = Image.open(resized_img_f)
+                                        resized_mask_img.load()
+                                except Exception as e:
+                                    print(f'Error reading resized mask: {e}. Regenerating it.', file=sys.stderr)
+                            if not validate_img(resized_mask_img):
+                                with mask_zip.open(mask_img_path, 'r') as img_f:
+                                    with resized_mask_zip.open(mask_img_path, 'w') as resized_img_f:
+                                        resized_mask_img = resize_img(Image.open(img_f))
+                                        resized_mask_img.save(resized_img_f, format="ppm")
+
+                            img_mask = np.asarray(resized_mask_img)
+                            res = result.pred_sem_seg.data.cpu().numpy()
+                            res[0, img_mask == False] = robot_body_masked_class
+                            result.pred_sem_seg.data = torch.from_numpy(res)
+
+                    # reformat segmentation and generate its visualization
+                    seg = np.asarray(result.pred_sem_seg.data.cpu().numpy().squeeze(0), dtype=np.uint8)
+
+                    # if the image is 1-channel, convert to 3-channel to allow drawing the colored segmentation masks
+                    if len(resized_img_np.shape) == 2:
+                        resized_img_np = np.stack([resized_img_np] * 3, -1)
+                    elif resized_img_np.shape[2] == 1:
+                        resized_img_np = np.stack([resized_img_np[:, :, 0]] * 3, -1)
+
+                    vis = show_result_pyplot(model, resized_img_np, result, show=False)
+
+                    # save segmentation
+                    with seg_zip.open(img_path, 'w') as f:
+                        Image.fromarray(seg).save(f, format=img_format)
+                    with vis_zip.open(img_path, 'w') as f:
+                        Image.fromarray(vis).save(f, format=img_format)
+
+    print('done!')
+
+
+def validate_img(resized_img: Image.Image) -> bool:
+    if resized_img is None:
+        return False
+    if any([d == 0 for d in resized_img.size]):
+        return False
+    resized_img_np = np.asarray(resized_img)
+    if len(resized_img_np.shape) < 2:
+        return False
+    return True
+
+
+if __name__ == '__main__':
+    main()
